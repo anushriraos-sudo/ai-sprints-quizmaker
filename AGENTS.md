@@ -5,15 +5,13 @@ agent conversation, so it describes only what is stable and true of the project.
 
 ## Project
 
-<!--
-Replace this section during Sprint 1 with a short description of what you are building:
-the problem, the primary user, and the current state. Two or three sentences.
-Keep it current. An out-of-date description here misleads every future conversation.
--->
+Quiz Maker is a tool where multiple teachers collaborate on a shared bank of
+multiple-choice questions. The primary user is a teacher authoring and reusing questions
+with colleagues.
 
-This is an unmodified AISprints starter. No application features have been built yet.
-The technical PRD in `ai-workspace/` is the source of truth for what is being built and
-for the current phase of work.
+Sprint 1 is building user registration and authentication only, with no MCQ features yet
+and deliberately no sessions, cookies, or tokens. `ai-workspace/AUTH_TECHNICAL_PRD.md` is
+the source of truth for what is being built and for the current phase of work.
 
 ## Stack
 
@@ -23,9 +21,11 @@ for the current phase of work.
 - **shadcn/ui** on Base UI, `base-nova` style, with Lucide icons
 - **TypeScript** in strict mode
 - **Wrangler** for Cloudflare configuration, secrets, and deployment
+- **Cloudflare D1** database `ai-sprints-quizmaker-db`, bound as `DB`
+- **Zod 4** for input validation. Note v4 syntax: `z.email()`, not `z.string().email()`
 
-No database, authentication, testing framework, or AI SDK is installed yet. Do not
-write code that imports one without adding it first and telling the user.
+No authentication, testing framework, or AI SDK is installed yet. Do not write code that
+imports one without adding it first and telling the user.
 
 ## Layout
 
