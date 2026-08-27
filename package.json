@@ -7,6 +7,8 @@
 		"build": "next build",
 		"start": "next start",
 		"lint": "eslint .",
+		"test": "vitest run",
+		"test:watch": "vitest",
 		"deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
 		"upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
 		"preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
@@ -27,14 +29,18 @@
 	},
 	"devDependencies": {
 		"@tailwindcss/postcss": "^4",
+		"@testing-library/react": "^16.3.2",
 		"@types/node": "^22.19.0",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
+		"@vitejs/plugin-react": "^5.2.0",
 		"eslint": "^9",
 		"eslint-config-next": "16.2.12",
+		"jsdom": "^30.0.1",
 		"shadcn": "^4.16.1",
 		"tailwindcss": "^4",
 		"typescript": "^5",
+		"vitest": "^4.1.11",
 		"wrangler": "^4.118.0"
 	}
 }

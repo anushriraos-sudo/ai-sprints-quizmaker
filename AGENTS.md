@@ -23,8 +23,9 @@ the source of truth for what is being built and for the current phase of work.
 - **Wrangler** for Cloudflare configuration, secrets, and deployment
 - **Cloudflare D1** database `ai-sprints-quizmaker-db`, bound as `DB`
 - **Zod 4** for input validation. Note v4 syntax: `z.email()`, not `z.string().email()`
+- **Vitest 4**, Testing Library, and jsdom for automated tests
 
-No authentication, testing framework, or AI SDK is installed yet. Do not write code that
+No third-party authentication framework or AI SDK is installed. Do not write code that
 imports one without adding it first and telling the user.
 
 ## Layout
@@ -49,6 +50,8 @@ Import through the `@/` alias, which maps to `src/`.
 | `npm run preview` | Build and run on the local **Workers** runtime |
 | `npm run build` | Production build |
 | `npm run lint` | ESLint |
+| `npm test` | Run the Vitest suite once |
+| `npm run test:watch` | Run Vitest in watch mode |
 | `npm run deploy` | Build and deploy to Cloudflare |
 | `npm run cf-typegen` | Regenerate `cloudflare-env.d.ts` after changing bindings |
 
