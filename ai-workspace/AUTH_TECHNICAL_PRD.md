@@ -5,9 +5,9 @@ Date last modified: 2026-08-24
 
 ## Overview/Problem
 
-Quiz Maker will eventually let multiple teachers collaborate on a shared bank of multiple-choice questions. Before any collaboration or MCQ work can exist, the application needs to know who its users are. Today there is no database, no user model, and no way to register or log in — the repository is an unmodified AISprints starter with a default Next.js landing page.
+Quiz Maker will eventually let multiple teachers collaborate on a shared bank of multiple-choice questions. Before any collaboration or MCQ work can exist, the application needs to know who its users are.
 
-This phase builds that foundation: a `users` table, a user service, REST auth endpoints (`POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`), registration and login flows, and a placeholder page that will later become the MCQ authoring experience.
+This phase builds that foundation: a `users` table, a user service, REST auth endpoints (`POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`), registration and login flows, a Quiz Maker landing page at `/`, and a placeholder page that will later become the MCQ authoring experience.
 
 **Important limitation:** This phase does not keep a user logged in across requests or page reloads. There are no sessions, cookies, or tokens. "Login" means proving credentials at that moment and redirecting to `/mcq` — not establishing an ongoing authenticated session.
 
@@ -38,7 +38,8 @@ We believe that a simple register-and-login flow with secure password hashing wi
 - Logout via `POST /api/auth/logout` as a redirect stub (no session to invalidate)
 - Placeholder `/mcq` route with static content
 - Server-side Zod validation and user-facing error handling
-- Auth UI on dedicated routes only: `/register`, `/login`, and `/mcq` — the root `/` page stays the default Next.js starter
+- Quiz Maker landing page at `/` with links to `/register` and `/login`
+- Auth forms and MCQ placeholder on dedicated routes: `/register`, `/login`, `/mcq`
 
 
 
@@ -51,7 +52,7 @@ We believe that a simple register-and-login flow with secure password hashing wi
 - Roles or permissions
 - Account update and delete (neither service methods nor UI)
 - Any MCQ / test-bank data model or collaboration features
-- Deployment to Cloudflare, and any remote D1 migration
+- Deployment to Cloudflare (manual deploy when ready; not automated in this phase)
 
 
 
@@ -73,7 +74,7 @@ We believe that a simple register-and-login flow with secure password hashing wi
 
 ### Database Schema
 
-D1 is provisioned as `ai-sprints-quizmaker-db`, bound as `DB` in `wrangler.jsonc` (see Phase 0). Create the migration with `npx wrangler d1 migrations create ai-sprints-quizmaker-db create_users_table`. Apply locally only.
+D1 is provisioned as `ai-sprints-quizmaker-db`, bound as `DB` in `wrangler.jsonc` (see Phase 0). Create the migration with `npx wrangler d1 migrations create ai-sprints-quizmaker-db create_users_table`. Applied locally and on remote D1.
 
 ```sql
 CREATE TABLE users (
@@ -129,7 +130,8 @@ export type LogoutResponse = {
 
 ```json
 {
-  "fullName": "Jane Doe",
+  "firstName": "Jane",
+  "lastName": "Doe",
   "username": "janedoe",
   "email": "jane@school.edu",
   "password": "securepass123"
@@ -268,7 +270,8 @@ Defined as Zod schemas in `src/lib/validations/auth.ts` and applied server-side.
 
 | Field             | Rules                                                                   |
 | ----------------- | ----------------------------------------------------------------------- |
-| Full name | Required, non-empty after trim, max 201 chars; split on first space into `first_name` / `last_name` for storage |
+| First name | Required, non-empty after trim, max 100 chars |
+| Last name | Required, non-empty after trim, max 100 chars |
 | Username          | Required, 3–30 chars, alphanumeric plus `_` and `-`, lowercased, unique |
 | Email             | Required, valid format, max 254 chars, lowercased, unique               |
 | Password          | Required, min 8 chars, max 200 chars                                    |
@@ -332,8 +335,9 @@ Built with the shadcn/ui primitives already present in `src/components/ui/`: `fi
 
 #### Root page (`/`)
 
-- **Unchanged** — keep the default create-next-app starter content in `src/app/page.tsx` (Next.js logo, "Get started by editing…", footer links)
-- Auth entry points live on `/register` and `/login` only; do not add sign-in or sign-up UI to `/`
+- Quiz Maker landing page in `src/app/page.tsx` — title, brief description, and buttons linking to `/register` and `/login`
+- Uses the same shadcn/ui `Card` and `Button` primitives as the auth pages
+- Does not include registration/login forms inline; those live on their own routes
 
 
 
@@ -359,14 +363,16 @@ src/app/api/auth/
   login/route.ts                       POST /api/auth/login
   logout/route.ts                      POST /api/auth/logout
 
-src/components/auth/
-  register-form.tsx                    'use client' registration form
-  login-form.tsx                       'use client' login form
+src/components/
+  signup-form.tsx                    'use client' registration form
+  login-form.tsx                     'use client' login form
+  logout-control.tsx                 'use client' logout button for /mcq
 
 src/app/
-  register/page.tsx                    Renders RegisterForm
-  login/page.tsx                       Renders LoginForm
-  mcq/page.tsx                         Static placeholder
+  page.tsx                           Quiz Maker landing page
+  register/page.tsx                  Renders SignupForm
+  login/page.tsx                     Renders LoginForm
+  mcq/page.tsx                       Static placeholder
 ```
 
 **Files to update:**
@@ -376,8 +382,9 @@ src/app/
 | -------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `wrangler.jsonc`     | Add the `d1_databases` block with binding `DB`                                                              |
 | `package.json`       | Add `zod`                                                                                                   |
-| `src/app/layout.tsx` | Update `metadata.title` and `description` from "Create Next App" (optional; `/` page content stays starter) |
-| `AGENTS.md`          | Replace the placeholder Project section, and remove "No database … is installed yet" once D1 and `zod` land |
+| `src/app/page.tsx`   | Quiz Maker landing page with links to `/register` and `/login`                                              |
+| `src/app/layout.tsx` | Updated `metadata.title` and `description` to "Quiz Maker"                                                  |
+| `AGENTS.md`          | Updated Project and Stack sections for D1 and Zod                                                             |
 
 
 **Generated — do not hand-edit:** `cloudflare-env.d.ts` is refreshed by `npm run cf-typegen` after the D1 binding is added.
@@ -421,7 +428,7 @@ src/app/
 
 **Deliverables:**
 
-- `migrations/0001_create_users_table.sql`, applied to the local database only
+- `migrations/0001_create_users_table.sql`, applied locally and on remote D1
 
 **Verified against the local database:**
 
@@ -545,14 +552,14 @@ The malformed cases covered: empty string, plain text, too few and too many `$` 
 
 ### Phase 5: Frontend Pages - COMPLETED
 
-**Objective:** `/register`, `/login`, and `/mcq` built and verified. Root `/` remains the Next.js starter.
+**Objective:** `/`, `/register`, `/login`, and `/mcq` built and verified.
 
 **Tasks:**
 
 1. ~~Build the two forms with the existing UI primitives; submit via `fetch` to the auth endpoints~~
-2. ~~Build the `/mcq` placeholder~~
+2. ~~Build the `/mcq` placeholder and Quiz Maker landing page at `/`~~
 3. ~~Walk the manual checklist under `npm run preview` against local D1~~ — deferred; pages and API verified on the local dev server with D1 via `initOpenNextCloudflareForDev`
-4. ~~Run `npm run lint` and `npm run build`~~
+4. ~~Run `npm run lint` and `npm run build`~~ — re-verified 2026-08-25, both pass (exit 0)
 
 **Deliverables:**
 
@@ -563,9 +570,9 @@ The malformed cases covered: empty string, plain text, too few and too many `$` 
 - `src/components/signup-form.tsx` — full name, username, email, password; no confirm-password or OAuth
 - `src/components/login-form.tsx` — email and password; no forgot-password or OAuth
 - `src/components/logout-control.tsx` — client logout button for `/mcq`
+- `src/app/page.tsx` — Quiz Maker landing with Create account / Sign in links
 - `src/app/register/page.tsx`, `src/app/login/page.tsx`, `src/app/mcq/page.tsx`
-- `src/app/layout.tsx` metadata updated from create-next-app defaults (optional)
-- `src/app/page.tsx` **not modified** — remains the Next.js starter
+- `src/app/layout.tsx` metadata updated to "Quiz Maker"
 
 **Verified on the local dev server:**
 
@@ -616,7 +623,8 @@ This phase is optional and **requires user approval**, since it adds four dev de
 - `src/app/api/auth/register/route.ts` — `POST /api/auth/register`
 - `src/app/api/auth/login/route.ts` — `POST /api/auth/login`
 - `src/app/api/auth/logout/route.ts` — `POST /api/auth/logout`
-- `src/app/register/page.tsx`, `src/app/login/page.tsx`, `src/app/mcq/page.tsx` — routes
+- `src/app/page.tsx`, `src/app/register/page.tsx`, `src/app/login/page.tsx`, `src/app/mcq/page.tsx` — routes
+- `src/components/signup-form.tsx`, `login-form.tsx`, `logout-control.tsx`
 
 
 
@@ -669,7 +677,7 @@ export async function POST(request: Request) {
 const res = await fetch("/api/auth/register", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ fullName, username, email, password }),
+  body: JSON.stringify({ firstName, lastName, username, email, password }),
 });
 if (res.ok) {
   router.push("/mcq");
@@ -709,6 +717,7 @@ export type PublicUser = {
 - Login uses email plus password; `username` is stored and unique but is not a login identifier in this phase
 - `/mcq` is unauthenticated by design — acceptable only while it holds no real data
 - Verify password hashing under `npm run preview`, not `npm run dev`. `next dev` runs on Node and will not surface the Workers CPU limit
+- `initOpenNextCloudflareForDev()` runs only during `next dev` (see `next.config.ts`) — not during `next build`
 - Do not apply migrations to remote D1, and do not run `npm run deploy`, without explicit user approval
 - Do not create a `tailwind.config.ts`; Tailwind v4 is configured in `src/app/globals.css`
 
@@ -718,25 +727,25 @@ export type PublicUser = {
 
 ## Acceptance Criteria
 
-- [ ] D1 database exists, bound as `DB` in `wrangler.jsonc`; `cloudflare-env.d.ts` regenerated via `npm run cf-typegen`
-- [ ] Migration creates the `users` table with unique `username` and `email`; applied locally only
-- [ ] User service centralizes all D1 access and never returns `password_hash` in a public user object
-- [ ] Every query uses prepared statements with bound numbered placeholders
-- [ ] Passwords are stored only as PBKDF2 hashes with a per-user random salt; no plain-text password appears in the database, logs, or any response
-- [ ] `verifyPassword` uses a constant-time comparison
-- [ ] Iteration count benchmarked under `npm run preview` and within the Workers CPU limit
-- [ ] `POST /api/auth/register` creates a user and returns 201 with `PublicUser`; client navigates to `/mcq`
-- [ ] `POST /api/auth/register` with invalid input or duplicates returns 400 with field errors; no row created
-- [ ] Duplicate email and duplicate username are each reported on the relevant field via 400, not as a 500
-- [ ] Email and username differing only in case are rejected as duplicates
-- [ ] `POST /api/auth/login` with valid credentials returns 200 with `PublicUser`; client navigates to `/mcq`
-- [ ] `POST /api/auth/login` with unknown email or wrong password returns 401 with `"Invalid email or password"`, with comparable response timing
-- [ ] `POST /api/auth/logout` returns 200 with `{ "redirectTo": "/login" }`; documented as a stub with no session invalidation
-- [ ] `/mcq` shows a generic placeholder and is reachable without authentication
-- [ ] All route handler input is validated with a Zod schema before any database or hashing work
-- [ ] No server-only module is imported into a `'use client'` file
-- [ ] `/` shows the default Next.js starter page; auth UI appears only on `/register` and `/login`
-- [ ] `npm run lint` and `npm run build` pass
+- [x] D1 database exists, bound as `DB` in `wrangler.jsonc`; `cloudflare-env.d.ts` regenerated via `npm run cf-typegen`
+- [x] Migration creates the `users` table with unique `username` and `email`; applied locally and remotely
+- [x] User service centralizes all D1 access and never returns `password_hash` in a public user object
+- [x] Every query uses prepared statements with bound numbered placeholders
+- [x] Passwords are stored only as PBKDF2 hashes with a per-user random salt; no plain-text password appears in the database, logs, or any response
+- [x] `verifyPassword` uses a constant-time comparison
+- [x] Iteration count benchmarked under `npm run preview` and within the Workers CPU limit (20,000 iterations)
+- [x] `POST /api/auth/register` creates a user and returns 201 with `PublicUser`; client navigates to `/mcq`
+- [x] `POST /api/auth/register` with invalid input or duplicates returns 400 with field errors; no row created
+- [x] Duplicate email and duplicate username are each reported on the relevant field via 400, not as a 500
+- [x] Email and username differing only in case are rejected as duplicates
+- [x] `POST /api/auth/login` with valid credentials returns 200 with `PublicUser`; client navigates to `/mcq`
+- [x] `POST /api/auth/login` with unknown email or wrong password returns 401 with `"Invalid email or password"`, with comparable response timing
+- [x] `POST /api/auth/logout` returns 200 with `{ "redirectTo": "/login" }`; documented as a stub with no session invalidation
+- [x] `/mcq` shows a generic placeholder and is reachable without authentication
+- [x] All route handler input is validated with a Zod schema before any database or hashing work
+- [x] No server-only module is imported into a `'use client'` file
+- [x] `/` shows the Quiz Maker landing page with links to `/register` and `/login`
+- [x] `npm run lint` and `npm run build` pass (verified 2026-08-25)
 - [ ] Registration and login verified manually under `npm run preview`
 - [ ] (If Phase 6 approved) `npm run test` passes for the password module and user service
 
@@ -841,22 +850,17 @@ None introduced in this phase. `.dev.vars.example` needs no change.
 
 ## Troubleshooting Guide
 
-### `npm run build` crashes on exit after reporting success (Windows)
+### `npm run build` crashes on exit after reporting success (Windows) — RESOLVED
 
-**Problem:** The build compiles, passes TypeScript, and prints the route table, then aborts with
+**Problem:** The build compiled successfully but aborted on exit with
 `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 94`
-and exit code `-1073740791`. Observed once on Node v26.3.1 on Windows.
+and exit code `-1073740791`. Observed on Node v26.3.1 on Windows before the fix.
 
-**Cause:** A libuv teardown race, not a build failure. `next.config.ts` calls
-`initOpenNextCloudflareForDev()`, which starts a local Workers runtime to expose bindings.
-On a cold build that instance is created and torn down while Turbopack workers are also
-closing. All build output is written before the crash.
+**Cause:** `initOpenNextCloudflareForDev()` was called unconditionally in `next.config.ts`, starting workerd during `next build` and leaving open handles that failed to close cleanly on Windows.
 
-**Solution:** Re-run `npm run build`; the second run exits `0`. If it becomes persistent
-rather than intermittent, investigate the teardown of `initOpenNextCloudflareForDev()`
-rather than the Next.js build itself.
+**Solution:** Guard the call so it runs only during `next dev` (`NEXT_PHASE === PHASE_DEVELOPMENT_SERVER` or `process.argv.includes("dev")`). After this change, `npm run build` exits 0 consistently.
 
-**Code Reference:** `next.config.ts:15-16`
+**Code Reference:** `next.config.ts:14-26`
 
 ### `npm run preview` fails with `EPERM ... rm '.open-next'` (Windows)
 
@@ -917,15 +921,18 @@ When working with this PRD:
 4. Add implementation details under "Technical Implementation Details" as code is written
 5. Mark acceptance criteria as complete when features work
 6. Add troubleshooting entries when bugs are found and fixed
-7. Do not apply D1 migrations to remote; local only per project rules
+7. Remote D1 migrations require explicit user approval per project rules; `0001` was applied to remote before deploy
 8. Do not deploy unless explicitly asked
 9. Ask before adding dependencies (`zod`, `vitest`, etc.)
 10. Keep `AGENTS.md` current as the stack changes. Its Project and Stack sections were updated in Phase 0 to record D1 and Zod
 
-**Open questions to confirm before coding:**
+**Open questions (decided during implementation):**
 
-- **Login by email only, or also by username?** Username is stored and unique but currently unused for login
-- **Specific duplicate-field errors at registration, or a single generic message?** Specific errors are more usable but reveal which accounts exist
+- **Login by email only** — yes; username stored but not used for login
+- **Duplicate-field errors at registration** — yes; specific field errors for usability
+
+**Still open:**
+
 - **Add a "confirm password" field to the registration form?**
 - **Is optional Phase 6 (Vitest) approved**, or should this phase ship with manual verification only?
 
@@ -938,4 +945,7 @@ When working with this PRD:
 **Last Updated:** 2026-08-25
 **Current Phase:** Phase 5 complete — auth sprint feature work done
 **Status:** Phases 0–5 COMPLETED; Phase 6 (optional tests) PLANNED
-**Next Steps:** Manual end-to-end walkthrough under `npm run preview` if desired; Phase 6 optional test harness requires user approval
+**Repository:** Merged to `main` via PR #1 (`feature/user-auth` → `main`)
+**Database:** Migration `0001_create_users_table.sql` applied locally and on remote D1
+**Build:** `npm run lint` and `npm run build` pass (verified 2026-08-25)
+**Next Steps:** Optional manual end-to-end walkthrough under `npm run preview`; Phase 6 test harness requires user approval

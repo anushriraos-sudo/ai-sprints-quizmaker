@@ -33,10 +33,8 @@ const emailField = z
   );
 
 export const registerSchema = z.object({
-  fullName: nameField("Full name").max(
-    201,
-    "Full name must be at most 201 characters",
-  ),
+  firstName: nameField("First name"),
+  lastName: nameField("Last name"),
   username: usernameField,
   email: emailField,
   password: z
@@ -45,24 +43,6 @@ export const registerSchema = z.object({
     .min(8, "Password must be at least 8 characters")
     .max(200, "Password must be at most 200 characters"),
 });
-
-/** Split a full name for storage in first_name / last_name columns. */
-export function parseFullName(fullName: string): {
-  firstName: string;
-  lastName: string;
-} {
-  const trimmed = fullName.trim();
-  const spaceIndex = trimmed.indexOf(" ");
-
-  if (spaceIndex === -1) {
-    return { firstName: trimmed, lastName: "" };
-  }
-
-  return {
-    firstName: trimmed.slice(0, spaceIndex),
-    lastName: trimmed.slice(spaceIndex + 1).trim(),
-  };
-}
 
 export const loginSchema = z.object({
   email: z
