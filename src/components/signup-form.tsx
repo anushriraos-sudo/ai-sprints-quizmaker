@@ -43,7 +43,8 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
-					fullName: formData.get("fullName"),
+					firstName: formData.get("firstName"),
+					lastName: formData.get("lastName"),
 					username: formData.get("username"),
 					email: formData.get("email"),
 					password: formData.get("password"),
@@ -79,19 +80,33 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
 						{formError ? (
 							<FieldError className="mb-1">{formError}</FieldError>
 						) : null}
-						<Field data-invalid={!!fieldErrors?.fullName}>
-							<FieldLabel htmlFor="fullName">Full name</FieldLabel>
+						<Field data-invalid={!!fieldErrors?.firstName}>
+							<FieldLabel htmlFor="firstName">First name</FieldLabel>
 							<Input
-								id="fullName"
-								name="fullName"
+								id="firstName"
+								name="firstName"
 								type="text"
-								autoComplete="name"
-								placeholder="Jane Doe"
+								autoComplete="given-name"
+								placeholder="Jane"
 								required
 								disabled={submitting}
-								aria-invalid={!!fieldErrors?.fullName}
+								aria-invalid={!!fieldErrors?.firstName}
 							/>
-							<FieldError>{fieldErrors?.fullName?.[0]}</FieldError>
+							<FieldError>{fieldErrors?.firstName?.[0]}</FieldError>
+						</Field>
+						<Field data-invalid={!!fieldErrors?.lastName}>
+							<FieldLabel htmlFor="lastName">Last name</FieldLabel>
+							<Input
+								id="lastName"
+								name="lastName"
+								type="text"
+								autoComplete="family-name"
+								placeholder="Doe"
+								required
+								disabled={submitting}
+								aria-invalid={!!fieldErrors?.lastName}
+							/>
+							<FieldError>{fieldErrors?.lastName?.[0]}</FieldError>
 						</Field>
 						<Field data-invalid={!!fieldErrors?.username}>
 							<FieldLabel htmlFor="username">Username</FieldLabel>

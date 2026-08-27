@@ -17,11 +17,7 @@ import {
 } from "@/lib/services/user-service";
 import type { AuthErrorResponse } from "@/lib/types/auth-api";
 import type { PublicUser } from "@/lib/types/user";
-import {
-  type LoginInput,
-  type RegisterInput,
-  parseFullName,
-} from "@/lib/validations/auth";
+import { type LoginInput, type RegisterInput } from "@/lib/validations/auth";
 
 const DUPLICATE_EMAIL = "That email is already registered";
 const DUPLICATE_USERNAME = "That username is taken";
@@ -62,10 +58,9 @@ export async function registerUser(
     }
 
     const passwordHash = await hashPassword(input.password);
-    const { firstName, lastName } = parseFullName(input.fullName);
     const created = await createUser({
-      firstName,
-      lastName,
+      firstName: input.firstName,
+      lastName: input.lastName,
       username: input.username,
       email: input.email,
       passwordHash,
