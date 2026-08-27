@@ -586,22 +586,26 @@ The malformed cases covered: empty string, plain text, too few and too many `$` 
 
 
 
-### Phase 6 (Optional): Test Harness - PLANNED
+### Phase 6 (Optional): Test Harness - COMPLETED
 
-**Objective:** Vitest covering the password module and user service.
+**Objective:** Vitest covering the password module, validation, user service, auth handlers, route handlers, and client auth forms.
 
-This phase is optional and **requires user approval**, since it adds four dev dependencies to a project that has no test framework. `.cursor/skills/testing/SKILL.md` documents the setup. Deferred to the end so it never blocks the feature work.
+The user approved the test stack on 2026-08-27. Vitest uses jsdom for client component tests and Vite's native `tsconfigPaths` resolution for the `@/` alias. `vite-tsconfig-paths` was initially approved but is not retained because current Vite provides that behavior natively.
 
 **Tasks:**
 
-1. Install `vitest`, `@vitejs/plugin-react`, `@testing-library/react`, `jsdom`, `vite-tsconfig-paths`; add `vitest.config.ts` and the `test` scripts
-2. Test `password.ts`: correct password verifies, wrong password fails, same input yields different hashes, malformed stored hash fails closed
-3. Test `user-service.ts` with `getCloudflareContext` mocked and a fake `DB`
-4. Test route handlers with the user service mocked at the module boundary
+1. ~~Install `vitest`, `@vitejs/plugin-react`, `@testing-library/react`, and `jsdom`; add `vitest.config.mts`, `test`, and `test:watch` scripts~~
+2. ~~Test `password.ts`: correct password verifies, wrong password fails, same input yields different hashes, malformed stored hash fails closed~~
+3. ~~Test `user-service.ts` with `getCloudflareContext` mocked and a fake `DB`~~
+4. ~~Test auth business logic and route handlers with dependencies mocked at module boundaries~~
+5. ~~Test registration, login error rendering, and logout navigation through the client forms~~
 
 **Deliverables:**
 
-- `vitest.config.ts`, `password.test.ts`, `user-service.test.ts`
+- `vitest.config.mts` and six test files covering 33 tests
+- `npm test` and `npm run test:watch`
+
+**TDD verification:** characterization tests were written before any application behavior was changed. The existing implementation passed the initial suite, so no production-code correction was needed. The final suite has 6 passing files and 33 passing tests. `npm run lint` and `npm run build` also pass.
 
 ---
 
@@ -934,7 +938,7 @@ When working with this PRD:
 **Still open:**
 
 - **Add a "confirm password" field to the registration form?**
-- **Is optional Phase 6 (Vitest) approved**, or should this phase ship with manual verification only?
+- **Phase 6 (Vitest)** — approved and completed on 2026-08-27
 
 ---
 
@@ -942,10 +946,10 @@ When working with this PRD:
 
 ## Current Status
 
-**Last Updated:** 2026-08-25
-**Current Phase:** Phase 5 complete — auth sprint feature work done
-**Status:** Phases 0–5 COMPLETED; Phase 6 (optional tests) PLANNED
+**Last Updated:** 2026-08-27
+**Current Phase:** Phase 6 complete — auth sprint implementation and test harness done
+**Status:** Phases 0–6 COMPLETED
 **Repository:** Merged to `main` via PR #1 (`feature/user-auth` → `main`)
 **Database:** Migration `0001_create_users_table.sql` applied locally and on remote D1
-**Build:** `npm run lint` and `npm run build` pass (verified 2026-08-25)
-**Next Steps:** Optional manual end-to-end walkthrough under `npm run preview`; Phase 6 test harness requires user approval
+**Build:** `npm test` (33 tests), `npm run lint`, and `npm run build` pass (verified 2026-08-27)
+**Next Steps:** Optional manual end-to-end walkthrough under `npm run preview`
