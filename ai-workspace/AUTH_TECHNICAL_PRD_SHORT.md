@@ -101,13 +101,13 @@ CREATE TABLE users (
 ### Validation
 
 
-| Field     | Rules                                                  |
-| --------- | ------------------------------------------------------ |
-| First name | Required, trim, max 100 chars |
-| Last name | Required, trim, max 100 chars |
-| Username  | 3–30 chars, alphanumeric + `_`/`-`, lowercased, unique |
-| Email     | Valid format, max 254 chars, lowercased, unique        |
-| Password  | 8–200 chars                                            |
+| Field      | Rules                                                  |
+| ---------- | ------------------------------------------------------ |
+| First name | Required, trim, max 100 chars                          |
+| Last name  | Required, trim, max 100 chars                          |
+| Username   | 3–30 chars, alphanumeric + `_`/`-`, lowercased, unique |
+| Email      | Valid format, max 254 chars, lowercased, unique        |
+| Password   | 8–200 chars                                            |
 
 
 Login uses email + password only (username is stored but not a login identifier).
@@ -124,12 +124,12 @@ Login uses email + password only (username is stored but not a login identifier)
 ### UI Routes
 
 
-| Route       | Purpose                                                |
-| ----------- | ------------------------------------------------------ |
-| `/`         | Quiz Maker landing — links to `/register` and `/login` |
+| Route       | Purpose                                                          |
+| ----------- | ---------------------------------------------------------------- |
+| `/`         | Quiz Maker landing — links to `/register` and `/login`           |
 | `/register` | Signup form (`firstName`, `lastName`, username, email, password) |
-| `/login`    | Sign-in form (email, password)                         |
-| `/mcq`      | Static placeholder + logout (public, not gated)        |
+| `/login`    | Sign-in form (email, password)                                   |
+| `/mcq`      | Static placeholder + logout (public, not gated)                  |
 
 
 ---
@@ -300,8 +300,8 @@ Requires user approval before installing test dependencies.
 - [x] Duplicate email/username → field errors; login failures → generic message
 - [x] `/mcq` is a public placeholder; `/` is the Quiz Maker landing page
 - [x] `npm run lint` and `npm run build` pass (verified 2026-08-25)
-- [ ] End-to-end walkthrough under `npm run preview`
-- [ ] (Optional Phase 6) `npm run test` passes
+- [x] End-to-end walkthrough under `npm run preview`
+- [x] (Optional Phase 6) `npm run test` passes
 
 ---
 
@@ -310,12 +310,12 @@ Requires user approval before installing test dependencies.
 ## Risks (summary)
 
 
-| Risk                                          | Mitigation                                              |
-| --------------------------------------------- | ------------------------------------------------------- |
-| PBKDF2 at 20k is weak vs OWASP                | Accepted for Free plan; upgrade iterations on Paid plan |
-| No sessions — `/mcq` is public                | Accepted until next sprint                              |
-| Windows: dev server locks `.open-next`        | Stop `npm run dev` before preview/deploy                |
-| Registration duplicate errors reveal accounts | Accepted for teaching tool; login uses generic error    |
+| Risk                                           | Mitigation                                              |
+| ---------------------------------------------- | ------------------------------------------------------- |
+| PBKDF2 at 20k is weak vs OWASP                 | Accepted for Free plan; upgrade iterations on Paid plan |
+| No sessions — `/mcq` is public                 | Accepted until next sprint                              |
+| Windows: dev/preview server locks `.open-next` | Stop all project servers before build/preview/deploy    |
+| Registration duplicate errors reveal accounts  | Accepted for teaching tool; login uses generic error    |
 
 
 ---
@@ -333,7 +333,7 @@ Sessions, route protection, real logout, user identity on pages, MCQ CRUD, colla
 ## Current Status
 
 **Last Updated:** 2026-08-25  
-**Status:** Phases 0–5 complete; Phase 6 optional tests not started  
+**Status:** Phases 0–6 complete;   
 **Repository:** Merged to `main` via PR #1  
 **Build:** `npm run lint` and `npm run build` pass  
 **Full PRD:** `[AUTH_TECHNICAL_PRD.md](./AUTH_TECHNICAL_PRD.md)`

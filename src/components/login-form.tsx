@@ -41,6 +41,7 @@ export function LoginForm({
 		setFieldErrors({});
 
 		const formData = new FormData(event.currentTarget);
+		const rememberMe = formData.get("rememberMe") === "on";
 
 		try {
 			const response = await fetch("/api/auth/login", {
@@ -49,6 +50,7 @@ export function LoginForm({
 				body: JSON.stringify({
 					email: formData.get("email"),
 					password: formData.get("password"),
+					rememberMe,
 				}),
 			});
 
@@ -108,6 +110,17 @@ export function LoginForm({
 									aria-invalid={!!fieldErrors?.password}
 								/>
 								<FieldError>{fieldErrors?.password?.[0]}</FieldError>
+							</Field>
+							<Field orientation="horizontal">
+								<input
+									id="rememberMe"
+									name="rememberMe"
+									type="checkbox"
+									value="on"
+									disabled={submitting}
+									className="size-4 rounded border border-input"
+								/>
+								<FieldLabel htmlFor="rememberMe">Remember me</FieldLabel>
 							</Field>
 							<Field>
 								<Button type="submit" disabled={submitting} className="w-full">

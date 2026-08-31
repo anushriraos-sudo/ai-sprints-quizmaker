@@ -32,9 +32,25 @@ function jsonRequest(path: string, body: unknown) {
 describe("auth route handlers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.registerUser.mockResolvedValue({ user: publicUser });
-    mocks.loginUser.mockResolvedValue({ user: publicUser });
-    mocks.logoutUser.mockReturnValue({ redirectTo: "/login" });
+    mocks.registerUser.mockResolvedValue({
+      user: publicUser,
+      session: {
+        token: "session-token",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        rememberMe: false,
+        maxAgeSeconds: 86400,
+      },
+    });
+    mocks.loginUser.mockResolvedValue({
+      user: publicUser,
+      session: {
+        token: "session-token",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        rememberMe: false,
+        maxAgeSeconds: 86400,
+      },
+    });
+    mocks.logoutUser.mockResolvedValue({ redirectTo: "/login" });
   });
 
   it("returns 400 for malformed registration JSON", async () => {
@@ -73,6 +89,8 @@ describe("auth route handlers", () => {
     });
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toEqual({ user: publicUser });
+    expect(response.headers.get("set-cookie")).toContain("session=session-token");
+    expect(response.headers.get("set-cookie")).toContain("HttpOnly");
   });
 
   it("returns registration field errors without calling business logic", async () => {
@@ -125,15 +143,23 @@ describe("auth route handlers", () => {
     expect(mocks.loginUser).toHaveBeenLastCalledWith({
       email: "jane@example.com",
       password: "correct",
+      rememberMe: false,
     });
     expect(success.status).toBe(200);
     await expect(success.json()).resolves.toEqual({ user: publicUser });
+    expect(success.headers.get("set-cookie")).toContain("session=session-token");
   });
 
-  it("returns the stateless logout response", async () => {
-    const response = await logoutPost();
+  it("clears the session cookie on logout", async () => {
+    const request = new Request("http://localhost/api/auth/logout", {
+      method: "POST",
+      headers: { cookie: "session=session-token" },
+    });
+    const response = await logoutPost(request);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ redirectTo: "/login" });
+    expect(mocks.logoutUser).toHaveBeenCalledWith("session-token");
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
   });
 });

@@ -9,9 +9,10 @@ Quiz Maker is a tool where multiple teachers collaborate on a shared bank of
 multiple-choice questions. The primary user is a teacher authoring and reusing questions
 with colleagues.
 
-Sprint 1 is building user registration and authentication only, with no MCQ features yet
-and deliberately no sessions, cookies, or tokens. `ai-workspace/AUTH_TECHNICAL_PRD.md` is
-the source of truth for what is being built and for the current phase of work.
+Sprint 1 established user registration and authentication. Sprint 2 adds
+D1-backed sessions with HTTP-only cookies, route protection, and real logout.
+`ai-workspace/AUTH_TECHNICAL_PRD.md` is the source of truth for what is being
+built and for the current phase of work.
 
 ## Stack
 

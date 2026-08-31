@@ -53,6 +53,13 @@ export const loginSchema = z.object({
   password: z
     .string({ error: "Password is required" })
     .min(1, "Password is required"),
+  rememberMe: z
+    .preprocess(
+      (value) => value === true || value === "true" || value === "on",
+      z.boolean(),
+    )
+    .optional()
+    .default(false),
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;

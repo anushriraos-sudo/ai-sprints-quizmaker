@@ -1,4 +1,5 @@
 import { registerUser } from "@/lib/api/auth-handlers";
+import { jsonWithSession } from "@/lib/api/auth-response";
 import { registerSchema } from "@/lib/validations/auth";
 import { NextResponse } from "next/server";
 
@@ -24,5 +25,5 @@ export async function POST(request: Request) {
     return NextResponse.json(result.error, { status: result.status });
   }
 
-  return NextResponse.json({ user: result.user }, { status: 201 });
+  return jsonWithSession(result, 201);
 }
