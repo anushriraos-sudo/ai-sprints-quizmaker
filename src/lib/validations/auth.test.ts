@@ -52,7 +52,25 @@ describe("loginSchema", () => {
     ).toEqual({
       email: "jane@example.com",
       password: "x",
+      rememberMe: false,
     });
+  });
+
+  it("accepts rememberMe from boolean or checkbox-style values", () => {
+    expect(
+      loginSchema.parse({
+        email: "jane@example.com",
+        password: "secret",
+        rememberMe: true,
+      }).rememberMe,
+    ).toBe(true);
+    expect(
+      loginSchema.parse({
+        email: "jane@example.com",
+        password: "secret",
+        rememberMe: "on",
+      }).rememberMe,
+    ).toBe(true);
   });
 
   it("rejects empty credentials", () => {

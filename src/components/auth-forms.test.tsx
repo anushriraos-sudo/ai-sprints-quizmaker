@@ -54,6 +54,34 @@ describe("auth forms", () => {
     });
   });
 
+  it("submits rememberMe when the checkbox is checked", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ user: {} }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<LoginForm />);
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "jane@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "password123" },
+    });
+    fireEvent.click(screen.getByLabelText("Remember me"));
+    fireEvent.click(screen.getByRole("button", { name: "Login" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledWith("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "jane@example.com",
+        password: "password123",
+        rememberMe: true,
+      }),
+    });
+  });
+
   it("shows the generic login error returned by the API", async () => {
     vi.stubGlobal(
       "fetch",

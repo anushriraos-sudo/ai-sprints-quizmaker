@@ -1,5 +1,5 @@
-Date created: 2026-08-24
-Date last modified: 2026-08-24
+Date created: 2026-08-24   
+Date last modified: 2026-08-26
 
 # User Registration & Authentication (Phase 1) - Technical PRD
 
@@ -225,8 +225,8 @@ Implemented in `src/lib/auth/password.ts` using the Web Crypto API, which is ava
 | Salt        | 16 random bytes from `crypto.getRandomValues`, unique per user |
 | Derived key | 32 bytes                                                       |
 
-**The iteration count is a documented compromise, not a recommendation.** OWASP specifies 600,000 iterations for PBKDF2-HMAC-SHA256. This project targets the Workers **Free plan**, which allows 10 ms of CPU per invocation, and 600,000 iterations costs ~207 ms on the Workers runtime — 20× the entire budget. 20,000 iterations costs ~7 ms, which fits. The stored password hashes are therefore roughly 30× weaker than current guidance, and that gap is a property of the hosting plan rather than of the code. Moving to the Workers Paid plan (default 30 s CPU) would allow raising the count to 600,000 immediately; because every hash records the iteration count it was created with, existing rows keep verifying and can be upgraded on next login.
 
+**The iteration count is a documented compromise, not a recommendation.** OWASP specifies 600,000 iterations for PBKDF2-HMAC-SHA256. This project targets the Workers **Free plan**, which allows 10 ms of CPU per invocation, and 600,000 iterations costs ~207 ms on the Workers runtime — 20× the entire budget. 20,000 iterations costs ~7 ms, which fits. The stored password hashes are therefore roughly 30× weaker than current guidance, and that gap is a property of the hosting plan rather than of the code. Moving to the Workers Paid plan (default 30 s CPU) would allow raising the count to 600,000 immediately; because every hash records the iteration count it was created with, existing rows keep verifying and can be upgraded on next login.
 
 **Storage format** — a single self-describing string, so the iteration count can be raised later without breaking existing rows:
 
@@ -268,13 +268,13 @@ The module also exports `DUMMY_PASSWORD_HASH`, a syntactically valid hash that n
 Defined as Zod schemas in `src/lib/validations/auth.ts` and applied server-side. Any client-side checking is a UX convenience only and is never the enforcement point.
 
 
-| Field             | Rules                                                                   |
-| ----------------- | ----------------------------------------------------------------------- |
-| First name | Required, non-empty after trim, max 100 chars |
-| Last name | Required, non-empty after trim, max 100 chars |
-| Username          | Required, 3–30 chars, alphanumeric plus `_` and `-`, lowercased, unique |
-| Email             | Required, valid format, max 254 chars, lowercased, unique               |
-| Password          | Required, min 8 chars, max 200 chars                                    |
+| Field      | Rules                                                                   |
+| ---------- | ----------------------------------------------------------------------- |
+| First name | Required, non-empty after trim, max 100 chars                           |
+| Last name  | Required, non-empty after trim, max 100 chars                           |
+| Username   | Required, 3–30 chars, alphanumeric plus `_` and `-`, lowercased, unique |
+| Email      | Required, valid format, max 254 chars, lowercased, unique               |
+| Password   | Required, min 8 chars, max 200 chars                                    |
 
 
 The password maximum matters: PBKDF2 cost scales with input, so an unbounded password field is a denial-of-service vector against the Workers CPU limit.
@@ -378,13 +378,13 @@ src/app/
 **Files to update:**
 
 
-| File                 | Change                                                                                                      |
-| -------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `wrangler.jsonc`     | Add the `d1_databases` block with binding `DB`                                                              |
-| `package.json`       | Add `zod`                                                                                                   |
-| `src/app/page.tsx`   | Quiz Maker landing page with links to `/register` and `/login`                                              |
-| `src/app/layout.tsx` | Updated `metadata.title` and `description` to "Quiz Maker"                                                  |
-| `AGENTS.md`          | Updated Project and Stack sections for D1 and Zod                                                             |
+| File                 | Change                                                         |
+| -------------------- | -------------------------------------------------------------- |
+| `wrangler.jsonc`     | Add the `d1_databases` block with binding `DB`                 |
+| `package.json`       | Add `zod`                                                      |
+| `src/app/page.tsx`   | Quiz Maker landing page with links to `/register` and `/login` |
+| `src/app/layout.tsx` | Updated `metadata.title` and `description` to "Quiz Maker"     |
+| `AGENTS.md`          | Updated Project and Stack sections for D1 and Zod              |
 
 
 **Generated — do not hand-edit:** `cloudflare-env.d.ts` is refreshed by `npm run cf-typegen` after the D1 binding is added.
@@ -403,10 +403,10 @@ src/app/
 
 **Tasks:**
 
-1. ~~`npx wrangler d1 create ai-sprints-quizmaker-db`~~ — created in region APAC, `database_id` `b6972999-f867-4a46-a6d1-192fb865303a`
-2. ~~Add the `d1_databases` block to `wrangler.jsonc` with binding `DB`~~ — Wrangler suggested the binding name `ai_sprints_quizmaker_db`; overridden to `DB` per `.cursor/rules/d1.mdc`
-3. ~~`npm run cf-typegen`~~ — `cloudflare-env.d.ts` now declares `DB: D1Database`
-4. ~~Install `zod`~~ — approved by the user; resolved to `zod@^4.4.3`
+1. `npx wrangler d1 create ai-sprints-quizmaker-db` — created in region APAC, `database_id` `b6972999-f867-4a46-a6d1-192fb865303a`
+2. ~~Add the~~ `d1_databases` ~~block to~~ `wrangler.jsonc` ~~with binding~~ `DB` — Wrangler suggested the binding name `ai_sprints_quizmaker_db`; overridden to `DB` per `.cursor/rules/d1.mdc`
+3. `npm run cf-typegen` — `cloudflare-env.d.ts` now declares `DB: D1Database`
+4. ~~Install~~ `zod` — approved by the user; resolved to `zod@^4.4.3`
 
 **Deliverables:**
 
@@ -414,17 +414,15 @@ src/app/
 
 **Note for Phase 4:** the installed version is **Zod 4**, not 3. Top-level string formats replace the chained methods — use `z.email()` rather than `z.string().email()`, which is deprecated in v4.
 
-
-
 ### Phase 1: Database Schema - COMPLETED
 
 **Objective:** `users` table exists locally via migration.
 
 **Tasks:**
 
-1. ~~`npx wrangler d1 migrations create ai-sprints-quizmaker-db create_users_table`~~ — Wrangler created the `migrations/` directory, which did not previously exist
+1. `npx wrangler d1 migrations create ai-sprints-quizmaker-db create_users_table` — Wrangler created the `migrations/` directory, which did not previously exist
 2. ~~Write the schema above into the generated file~~
-3. ~~Apply locally: `npx wrangler d1 migrations apply ai-sprints-quizmaker-db --local`~~ — applied with the dev server running; no file-lock conflict on Windows
+3. ~~Apply locally:~~ `npx wrangler d1 migrations apply ai-sprints-quizmaker-db --local` — applied with the dev server running; no file-lock conflict on Windows
 
 **Deliverables:**
 
@@ -441,18 +439,16 @@ src/app/
 
 **Note for Phase 3:** a multi-statement `wrangler d1 execute` rolls back entirely if any statement fails, so partial writes were not observed during testing.
 
-
-
 ### Phase 2: Password Hashing Module - COMPLETED
 
 **Objective:** `src/lib/auth/password.ts` with `hashPassword` and `verifyPassword`.
 
 **Tasks:**
 
-1. ~~Implement PBKDF2-HMAC-SHA256 via `crypto.subtle.deriveBits`~~
-2. ~~Encode as `pbkdf2$<iterations>$<saltBase64>$<hashBase64>`~~
-3. ~~Implement constant-time comparison in `verifyPassword`~~
-4. ~~Benchmark the iteration count under `npm run preview`~~ — **exceeds the Free plan limit; see the risk below**
+1. ~~Implement PBKDF2-HMAC-SHA256 via~~ `crypto.subtle.deriveBits`
+2. ~~Encode as~~ `pbkdf2$<iterations>$<saltBase64>$<hashBase64>`
+3. ~~Implement constant-time comparison in~~ `verifyPassword`
+4. ~~Benchmark the iteration count under~~ `npm run preview` — **exceeds the Free plan limit; see the risk below**
 5. ~~Verify that two hashes of the same password differ and that both verify~~
 
 **Deliverables:**
@@ -461,14 +457,16 @@ src/app/
 
 **Verified in both runtimes** via a temporary diagnostic route, since a module this security-sensitive should not be accepted on inspection alone. The route was deleted afterwards.
 
-| Check | Node (`npm run dev`) | Workers (`npm run preview`) |
-|---|---|---|
-| Two hashes of one password differ (random salt) | pass | pass |
-| Both hashes verify against the original password | pass | pass |
-| Wrong password, wrong case, and empty password rejected | pass | pass |
-| `DUMMY_PASSWORD_HASH` never verifies | pass | pass |
-| 11 malformed stored values fail closed without throwing | pass | pass |
-| Native `crypto.subtle.timingSafeEqual` present | **no** | **yes** |
+
+| Check                                                   | Node (`npm run dev`) | Workers (`npm run preview`) |
+| ------------------------------------------------------- | -------------------- | --------------------------- |
+| Two hashes of one password differ (random salt)         | pass                 | pass                        |
+| Both hashes verify against the original password        | pass                 | pass                        |
+| Wrong password, wrong case, and empty password rejected | pass                 | pass                        |
+| `DUMMY_PASSWORD_HASH` never verifies                    | pass                 | pass                        |
+| 11 malformed stored values fail closed without throwing | pass                 | pass                        |
+| Native `crypto.subtle.timingSafeEqual` present          | **no**               | **yes**                     |
+
 
 The malformed cases covered: empty string, plain text, too few and too many `$` parts, unknown algorithm label, non-numeric, zero, negative, and absurd iteration counts, invalid base64, and a truncated hash.
 
@@ -487,9 +485,7 @@ The malformed cases covered: empty string, plain text, too few and too many `$` 
 - `MAX_ITERATIONS = 1_000_000` guard, so a corrupted row claiming a huge cost cannot exhaust the CPU budget on a single login
 - `DUMMY_PASSWORD_HASH`, which login uses when the email is unknown so the request still pays full PBKDF2 cost and does not leak account existence through timing. This supports an edge case the PRD already required but had no mechanism for
 
-**Also fixed:** `eslint.config.mjs` did not ignore `.wrangler/**`. Running `npm run preview` generates bundles there, after which `npm run lint` reported 4,756 problems in generated code. `.open-next/**` was already ignored; `.wrangler/**` now is too.
-
-
+**Also fixed:** `eslint.config.mjs` did not ignore `.wrangler/`**. Running** `npm run preview` **generates bundles there, after which** `npm run lint` **reported 4,756 problems in generated code.** `.open-next/` was already ignored; `.wrangler/`** now is too.
 
 ### Phase 3: User Service - COMPLETED
 
@@ -497,10 +493,10 @@ The malformed cases covered: empty string, plain text, too few and too many `$` 
 
 **Tasks:**
 
-1. ~~Implement `getDb()` in `src/lib/db.ts`~~
-2. ~~Implement `createUser`, `getUserById`, `getUserByEmail`, `getUserByUsername`~~
-3. ~~Map snake_case rows to camelCase types; export `PublicUser` (never includes `password_hash`)~~
-4. ~~Handle the `UNIQUE` constraint violation as a typed duplicate result, not a thrown 500~~
+1. ~~Implement~~ `getDb()` ~~in~~ `src/lib/db.ts`
+2. ~~Implement~~ `createUser`~~,~~ `getUserById`~~,~~ `getUserByEmail`~~,~~ `getUserByUsername`
+3. ~~Map snake_case rows to camelCase types; export~~ `PublicUser` ~~(never includes~~ `password_hash`~~)~~
+4. ~~Handle the~~ `UNIQUE` ~~constraint violation as a typed duplicate result, not a thrown 500~~
 
 **Deliverables:**
 
@@ -508,13 +504,15 @@ The malformed cases covered: empty string, plain text, too few and too many `$` 
 
 **Verified via a temporary diagnostic route** (deleted afterwards), since D1 access should not be accepted on inspection alone:
 
-| Check | Result |
-|---|---|
-| `createUser` inserts and returns `PublicUser` without `passwordHash` | pass |
-| `getUserById`, `getUserByEmail`, `getUserByUsername` return the same row | pass |
-| Email lookup is case-insensitive (`COLLATE NOCASE`) | pass |
-| Duplicate username maps to `{ ok: false, duplicate: "username" }` | pass |
-| Case-variant duplicate email maps to `{ ok: false, duplicate: "email" }` | pass |
+
+| Check                                                                    | Result |
+| ------------------------------------------------------------------------ | ------ |
+| `createUser` inserts and returns `PublicUser` without `passwordHash`     | pass   |
+| `getUserById`, `getUserByEmail`, `getUserByUsername` return the same row | pass   |
+| Email lookup is case-insensitive (`COLLATE NOCASE`)                      | pass   |
+| Duplicate username maps to `{ ok: false, duplicate: "username" }`        | pass   |
+| Case-variant duplicate email maps to `{ ok: false, duplicate: "email" }` | pass   |
+
 
 
 
@@ -524,9 +522,9 @@ The malformed cases covered: empty string, plain text, too few and too many `$` 
 
 **Tasks:**
 
-1. ~~Write `registerSchema` and `loginSchema` in `src/lib/validations/auth.ts`~~
-2. ~~Implement handler functions in `src/lib/api/auth-handlers.ts`~~
-3. ~~Create route handlers at `src/app/api/auth/register/route.ts`, `login/route.ts`, `logout/route.ts`~~
+1. ~~Write~~ `registerSchema` ~~and~~ `loginSchema` ~~in~~ `src/lib/validations/auth.ts`
+2. ~~Implement handler functions in~~ `src/lib/api/auth-handlers.ts`
+3. ~~Create route handlers at~~ `src/app/api/auth/register/route.ts`~~,~~ `login/route.ts`~~,~~ `logout/route.ts`
 4. ~~Each route parses JSON, validates with Zod, calls the handler, and returns the appropriate status code~~
 
 **Deliverables:**
@@ -536,17 +534,19 @@ The malformed cases covered: empty string, plain text, too few and too many `$` 
 
 **Verified against the local dev server** (D1 via `initOpenNextCloudflareForDev`):
 
-| Check | Result |
-|---|---|
-| `POST /api/auth/register` returns 201 with `PublicUser` (no `passwordHash`) | pass |
-| Duplicate username / email each return 400 with the correct field error | pass |
-| Both username and email taken together return both field errors | pass |
-| Case-variant duplicate email rejected | pass |
-| Invalid email format returns `"Enter a valid email address"` | pass |
-| Malformed JSON returns `{ formError: "Invalid request body" }` | pass |
-| `POST /api/auth/login` returns 200 with `PublicUser` on valid credentials | pass |
-| Unknown email and wrong password both return 401 with `"Invalid email or password"` | pass |
-| `POST /api/auth/logout` returns 200 with `{ redirectTo: "/login" }` | pass |
+
+| Check                                                                               | Result |
+| ----------------------------------------------------------------------------------- | ------ |
+| `POST /api/auth/register` returns 201 with `PublicUser` (no `passwordHash`)         | pass   |
+| Duplicate username / email each return 400 with the correct field error             | pass   |
+| Both username and email taken together return both field errors                     | pass   |
+| Case-variant duplicate email rejected                                               | pass   |
+| Invalid email format returns `"Enter a valid email address"`                        | pass   |
+| Malformed JSON returns `{ formError: "Invalid request body" }`                      | pass   |
+| `POST /api/auth/login` returns 200 with `PublicUser` on valid credentials           | pass   |
+| Unknown email and wrong password both return 401 with `"Invalid email or password"` | pass   |
+| `POST /api/auth/logout` returns 200 with `{ redirectTo: "/login" }`                 | pass   |
+
 
 
 
@@ -556,10 +556,10 @@ The malformed cases covered: empty string, plain text, too few and too many `$` 
 
 **Tasks:**
 
-1. ~~Build the two forms with the existing UI primitives; submit via `fetch` to the auth endpoints~~
-2. ~~Build the `/mcq` placeholder and Quiz Maker landing page at `/`~~
-3. ~~Walk the manual checklist under `npm run preview` against local D1~~ — deferred; pages and API verified on the local dev server with D1 via `initOpenNextCloudflareForDev`
-4. ~~Run `npm run lint` and `npm run build`~~ — re-verified 2026-08-25, both pass (exit 0)
+1. ~~Build the two forms with the existing UI primitives; submit via~~ `fetch` ~~to the auth endpoints~~
+2. ~~Build the~~ `/mcq` ~~placeholder and Quiz Maker landing page at~~ `/`
+3. ~~Walk the manual checklist under~~ `npm run preview` ~~against local D1~~ — deferred; pages and API verified on the local dev server with D1 via `initOpenNextCloudflareForDev`
+4. ~~Run~~ `npm run lint` ~~and~~ `npm run build` — re-verified 2026-08-25, both pass (exit 0)
 
 **Deliverables:**
 
@@ -576,13 +576,15 @@ The malformed cases covered: empty string, plain text, too few and too many `$` 
 
 **Verified on the local dev server:**
 
-| Check | Result |
-|---|---|
-| `/`, `/register`, `/login`, `/mcq` all return 200 | pass |
+
+| Check                                                                      | Result             |
+| -------------------------------------------------------------------------- | ------------------ |
+| `/`, `/register`, `/login`, `/mcq` all return 200                          | pass               |
 | Register form posts to `/api/auth/register` and navigates to `/mcq` on 201 | pass (Phase 4 API) |
-| Login form posts to `/api/auth/login` and navigates to `/mcq` on 200 | pass (Phase 4 API) |
-| Field errors from 400 responses render via `FieldError` | pass (Phase 4 API) |
-| `npm run lint` and `npm run build` | pass |
+| Login form posts to `/api/auth/login` and navigates to `/mcq` on 200       | pass (Phase 4 API) |
+| Field errors from 400 responses render via `FieldError`                    | pass (Phase 4 API) |
+| `npm run lint` and `npm run build`                                         | pass               |
+
 
 
 
@@ -594,9 +596,9 @@ The user approved the test stack on 2026-08-27. Vitest uses jsdom for client com
 
 **Tasks:**
 
-1. ~~Install `vitest`, `@vitejs/plugin-react`, `@testing-library/react`, and `jsdom`; add `vitest.config.mts`, `test`, and `test:watch` scripts~~
-2. ~~Test `password.ts`: correct password verifies, wrong password fails, same input yields different hashes, malformed stored hash fails closed~~
-3. ~~Test `user-service.ts` with `getCloudflareContext` mocked and a fake `DB`~~
+1. ~~Install~~ `vitest`~~,~~ `@vitejs/plugin-react`~~,~~ `@testing-library/react`~~, and~~ `jsdom`~~; add~~ `vitest.config.mts`~~,~~ `test`~~, and~~ `test:watch` ~~scripts~~
+2. ~~Test~~ `password.ts`~~: correct password verifies, wrong password fails, same input yields different hashes, malformed stored hash fails closed~~
+3. ~~Test~~ `user-service.ts` ~~with~~ `getCloudflareContext` ~~mocked and a fake~~ `DB`
 4. ~~Test auth business logic and route handlers with dependencies mocked at module boundaries~~
 5. ~~Test registration, login error rendering, and logout navigation through the client forms~~
 
@@ -749,9 +751,9 @@ export type PublicUser = {
 - [x] All route handler input is validated with a Zod schema before any database or hashing work
 - [x] No server-only module is imported into a `'use client'` file
 - [x] `/` shows the Quiz Maker landing page with links to `/register` and `/login`
-- [x] `npm run lint` and `npm run build` pass (verified 2026-08-25)
-- [ ] Registration and login verified manually under `npm run preview`
-- [ ] (If Phase 6 approved) `npm run test` passes for the password module and user service
+- [x] `npm run lint` and `npm run build` pass (verified 2026-08-27)
+- [x] Registration, login, rejection paths, and logout verified under `npm run preview` on the Workers runtime (2026-08-27)
+- [x] (Phase 6 approved) `npm run test` passes: 6 files, 33 tests
 
 ---
 
@@ -795,10 +797,11 @@ export type PublicUser = {
 
 ### New Dependencies
 
-| Package                                                                                    | Purpose                        | Status                                                                                                |
-| ------------------------------------------------------------------------------------------ | ------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| `zod`                                                                                      | Route handler input validation | **Installed in Phase 0** at `^4.4.3`. Required by `.cursor/rules/nextjs.mdc` and `.cursor/BUGBOT.md`  |
-| `vitest`, `@vitejs/plugin-react`, `@testing-library/react`, `jsdom`, `vite-tsconfig-paths` | Unit testing                   | Not installed; requires approval. Optional Phase 6 only, per `.cursor/skills/testing/SKILL.md`        |
+
+| Package                                                             | Purpose                        | Status                                                                                               |
+| ------------------------------------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `zod`                                                               | Route handler input validation | **Installed in Phase 0** at `^4.4.3`. Required by `.cursor/rules/nextjs.mdc` and `.cursor/BUGBOT.md` |
+| `vitest`, `@vitejs/plugin-react`, `@testing-library/react`, `jsdom` | Automated testing              | **Installed in Phase 6**; 6 files and 33 tests pass                                                  |
 
 
 No new dependency is needed for password hashing or for UI.
@@ -819,16 +822,14 @@ None introduced in this phase. `.dev.vars.example` needs no change.
 
 - **Risk (RESOLVED for now, with an accepted weakness):** the **Workers Free plan allows 10 ms of CPU per invocation**, which is far below what any current password-hashing guidance assumes. Measured on the Workers runtime:
 
-  | Configuration | Median | Fits 10 ms? |
-  |---|---|---|
-  | PBKDF2 t=20,000 (**chosen**) | ~7 ms | yes |
-  | PBKDF2 t=100,000 (original) | 33 ms | no |
-  | PBKDF2 t=600,000 (OWASP) | 207 ms | no |
+  | Configuration                | Median | Fits 10 ms? |
+  | ---------------------------- | ------ | ----------- |
+  | PBKDF2 t=20,000 (**chosen**) | ~7 ms  | yes         |
+  | PBKDF2 t=100,000 (original)  | 33 ms  | no          |
+  | PBKDF2 t=600,000 (OWASP)     | 207 ms | no          |
 
 - **Decision:** iterations lowered to 20,000. This is the strongest setting that fits the Free plan, and it is still roughly 30× below OWASP guidance. **The residual weakness is accepted and is a plan limitation, not a code defect.** Raise to 600,000 on moving to the Paid plan; the self-describing hash format makes that a one-constant change with no data migration.
-
 - **Margin is thin.** At 20,000 iterations a hash costs ~7 ms median and up to ~9–11 ms in the worst samples observed, against a 10 ms budget that must also cover framework and route overhead. D1 queries are I/O and do not count toward CPU, so the hash dominates. The measurements come from local `workerd` on a loaded Windows machine and are probably pessimistic relative to Cloudflare's hardware, but if a deployed Worker reports CPU-limit errors, lowering to ~15,000 is the first lever.
-
 - **Evaluated and rejected: WASM Argon2id.** Attempted empirically with `hash-wasm`, which **cannot run on Workers at all**: every call failed with `CompileError: WebAssembly.compile(): Wasm code generation disallowed by embedder`. Workers forbids compiling WebAssembly from bytes at runtime and requires `.wasm` to be imported as a static module at build time; `hash-wasm` inlines its WASM as base64 and compiles on first use. Packages such as `argon2-wasm-edge` and `cfw-argon2id` exist precisely to work around this, but they need `.wasm` import wiring through Turbopack and OpenNext. Even if that were built, the ceiling does not move: OWASP's *minimum* Argon2id profile (m=19 MiB, t=2) costs tens of milliseconds, the standard profile (m=64 MiB, t=3) costs 250–400 ms, and fitting 10 ms would mean roughly 1–2 MiB of memory — ten to twenty times below the minimum, discarding most of the memory-hardness that motivates Argon2id. `hash-wasm` was uninstalled. Argon2id is worth revisiting **only on the Paid plan**, where it can be given real parameters.
 - **Risk:** No session means `/mcq` is publicly accessible
 - **Mitigation:** Accepted for this phase since the page holds no data; session management is the first item of the next sprint
@@ -854,6 +855,8 @@ None introduced in this phase. `.dev.vars.example` needs no change.
 
 ## Troubleshooting Guide
 
+
+
 ### `npm run build` crashes on exit after reporting success (Windows) — RESOLVED
 
 **Problem:** The build compiled successfully but aborted on exit with
@@ -869,28 +872,29 @@ and exit code `-1073740791`. Observed on Node v26.3.1 on Windows before the fix.
 ### `npm run preview` fails with `EPERM ... rm '.open-next'` (Windows)
 
 **Problem:** The OpenNext build aborts immediately while clearing its output directory:
-`Error: EPERM, Permission denied: ...\.open-next`, or `.open-next\assets - The process
-cannot access the file because it is being used by another process`.
+`Error: EPERM, Permission denied: ...\.open-next`, or `.open-next\assets - The process cannot access the file because it is being used by another process`.
 
-**Cause:** `npm run dev` is running. `next.config.ts` calls `initOpenNextCloudflareForDev()`,
-which starts a `workerd` process that holds a handle on `.open-next\assets`. Windows will
-not delete a directory with an open handle, and the dev server respawns `workerd` shortly
-after it is killed, so deleting the directory on its own does not help.
+**Cause:** Either `npm run dev` or a previous `npm run preview` is still running.
+Both can start `workerd`, which serves files from `.open-next` and keeps Windows file
+handles open. A subsequent OpenNext build begins by deleting and recreating that same
+directory, so Windows rejects the deletion with `EPERM`.
 
-**Solution:** Stop `npm run dev` before running `npm run preview`. The two do not coexist
-on Windows. If the directory is already stuck, kill `workerd` and delete in a single
-command so the dev server has no window to respawn it:
-`Get-Process workerd | Stop-Process -Force; Remove-Item -Recurse -Force .open-next`
+**Solution:** Stop every dev/preview process for this project before starting another
+OpenNext build, preview, or deploy. Normally `Ctrl+C` in the terminal running the server
+is sufficient. If an orphaned preview remains, terminate that preview's process tree and
+retry the build. Do not delete `.open-next` while a dev/preview process is still running;
+it may immediately reacquire the lock. WSL is the preferred fallback because OpenNext
+does not fully support native Windows.
 
 ### `npm run lint` reports thousands of problems in generated code
 
 **Problem:** After running `npm run preview` for the first time, `npm run lint` fails with
 several thousand errors and warnings in files under `.wrangler\tmp\`.
 
-**Cause:** `eslint.config.mjs` ignored `.open-next/**` but not `.wrangler/**`. The
+**Cause:** `eslint.config.mjs` ignored `.open-next/`** but not `.wrangler/`**. The
 directory does not exist until a preview or deploy runs, so the gap is invisible until then.
 
-**Solution:** Fixed in Phase 2 by adding `.wrangler/**` to the `ignores` list.
+**Solution:** Fixed in Phase 2 by adding `.wrangler/`** to the `ignores` list.
 
 **Code Reference:** `eslint.config.mjs:8-17`
 
@@ -949,7 +953,7 @@ When working with this PRD:
 **Last Updated:** 2026-08-27
 **Current Phase:** Phase 6 complete — auth sprint implementation and test harness done
 **Status:** Phases 0–6 COMPLETED
-**Repository:** Merged to `main` via PR #1 (`feature/user-auth` → `main`)
+**Repository:** Auth implementation and Phase 6 test harness merged to `main` through PR #4
 **Database:** Migration `0001_create_users_table.sql` applied locally and on remote D1
-**Build:** `npm test` (33 tests), `npm run lint`, and `npm run build` pass (verified 2026-08-27)
-**Next Steps:** Optional manual end-to-end walkthrough under `npm run preview`
+**Build:** `npm test` (33 tests), `npm run lint`, `npm run build`, OpenNext build, Wrangler dry-run, and Worker startup check pass (verified 2026-08-27)
+**Next Steps:** Sprint 1 acceptance criteria are complete; session-based authentication remains intentionally deferred to the next sprint

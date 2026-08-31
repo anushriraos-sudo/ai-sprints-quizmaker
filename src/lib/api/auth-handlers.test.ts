@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   getUserByEmail: vi.fn(),
   getUserByUsername: vi.fn(),
   toPublicUser: vi.fn(),
+  createSession: vi.fn(),
+  deleteSession: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/password", async (importOriginal) => {
@@ -27,6 +29,11 @@ vi.mock("@/lib/services/user-service", () => ({
   getUserByEmail: mocks.getUserByEmail,
   getUserByUsername: mocks.getUserByUsername,
   toPublicUser: mocks.toPublicUser,
+}));
+
+vi.mock("@/lib/services/session-service", () => ({
+  createSession: mocks.createSession,
+  deleteSession: mocks.deleteSession,
 }));
 
 import {
@@ -58,6 +65,12 @@ describe("auth handlers", () => {
     mocks.createUser.mockResolvedValue({ ok: true, user: publicUser });
     mocks.verifyPassword.mockResolvedValue(true);
     mocks.toPublicUser.mockReturnValue(publicUser);
+    mocks.createSession.mockResolvedValue({
+      token: "session-token",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      rememberMe: false,
+      maxAgeSeconds: 86400,
+    });
   });
 
   it("hashes a registration password and returns only PublicUser", async () => {
@@ -77,7 +90,16 @@ describe("auth handlers", () => {
       email: "jane@example.com",
       passwordHash: "pbkdf2$derived",
     });
-    expect(result).toEqual({ user: publicUser });
+    expect(result).toEqual({
+      user: publicUser,
+      session: {
+        token: "session-token",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        rememberMe: false,
+        maxAgeSeconds: 86400,
+      },
+    });
+    expect(mocks.createSession).toHaveBeenCalledWith(publicUser.id, false);
     expect(JSON.stringify(result)).not.toContain("secret123");
     expect(JSON.stringify(result)).not.toContain("passwordHash");
   });
@@ -154,11 +176,45 @@ describe("auth handlers", () => {
     });
     await expect(
       loginUser({ email: userRecord.email, password: "correct" }),
-    ).resolves.toEqual({ user: publicUser });
+    ).resolves.toEqual({
+      user: publicUser,
+      session: {
+        token: "session-token",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        rememberMe: false,
+        maxAgeSeconds: 86400,
+      },
+    });
     expect(mocks.toPublicUser).toHaveBeenCalledWith(userRecord);
+    expect(mocks.createSession).toHaveBeenCalledWith(publicUser.id, false);
   });
 
-  it("keeps logout stateless", () => {
-    expect(logoutUser()).toEqual({ redirectTo: "/login" });
+  it("honors rememberMe when creating a login session", async () => {
+    mocks.getUserByEmail.mockResolvedValue(userRecord);
+    mocks.verifyPassword.mockResolvedValue(true);
+    mocks.createSession.mockResolvedValue({
+      token: "long-session",
+      expiresAt: "2099-02-01T00:00:00.000Z",
+      rememberMe: true,
+      maxAgeSeconds: 2592000,
+    });
+
+    await expect(
+      loginUser({
+        email: userRecord.email,
+        password: "correct",
+        rememberMe: true,
+      }),
+    ).resolves.toMatchObject({
+      session: { rememberMe: true, maxAgeSeconds: 2592000 },
+    });
+    expect(mocks.createSession).toHaveBeenCalledWith(publicUser.id, true);
+  });
+
+  it("invalidates the session on logout", async () => {
+    await expect(logoutUser("session-token")).resolves.toEqual({
+      redirectTo: "/login",
+    });
+    expect(mocks.deleteSession).toHaveBeenCalledWith("session-token");
   });
 });
