@@ -1,7 +1,7 @@
 Date created: 2026-08-24   
-Date last modified: 2026-08-26
+Date last modified: 2026-08-31
 
-# User Registration & Authentication (Phase 1) - Technical PRD
+# User Registration & Authentication - Technical PRD
 
 ## Overview/Problem
 
@@ -9,7 +9,10 @@ Quiz Maker will eventually let multiple teachers collaborate on a shared bank of
 
 This phase builds that foundation: a `users` table, a user service, REST auth endpoints (`POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`), registration and login flows, a Quiz Maker landing page at `/`, and a placeholder page that will later become the MCQ authoring experience.
 
-**Important limitation:** This phase does not keep a user logged in across requests or page reloads. There are no sessions, cookies, or tokens. "Login" means proving credentials at that moment and redirecting to `/mcq` — not establishing an ongoing authenticated session.
+1. **Sprint 1 (Phases 0–6):** User registration, login, logout endpoints, password hashing, and a placeholder `/mcq` page — completed.
+2. **Sprint 2 (Phase 7):** D1-backed sessions with HTTP-only cookies, route protection, remember-me login, real logout, and signed-in identity on `/mcq` — completed on branch `feature/user-auth-jwt`.
+
+After Phase 7, a successful register or login establishes an authenticated session that survives page reloads. The session token travels in an **HttpOnly cookie**; the raw token is never stored in D1 — only its SHA-256 hash. **JWTs, access tokens, and refresh tokens were evaluated and cut** in favour of database-backed opaque tokens, because real logout requires server-side invalidation and no new dependency was justified.
 
 ---
 
@@ -17,7 +20,7 @@ This phase builds that foundation: a `users` table, a user service, REST auth en
 
 ## Hypothesis
 
-We believe that a simple register-and-login flow with secure password hashing will give teachers a working account foundation for future MCQ and collaboration features, without the complexity of session management in the first sprint.
+We believe that secure password hashing plus D1-backed sessions with HttpOnly cookies gives teachers a working authenticated foundation for future MCQ and collaboration features, without the complexity of JWT libraries or refresh-token rotation on Cloudflare Workers.
 
 ---
 
@@ -35,19 +38,27 @@ We believe that a simple register-and-login flow with secure password hashing wi
 - REST API route handlers under `src/app/api/auth/` for register, login, and logout
 - Registration flow: form → `POST /api/auth/register` → hashed password stored → client redirect to `/mcq`
 - Login flow: form → `POST /api/auth/login` → password verification → client redirect to `/mcq`
-- Logout via `POST /api/auth/logout` as a redirect stub (no session to invalidate)
-- Placeholder `/mcq` route with static content
+- Placeholder `/mcq` route
 - Server-side Zod validation and user-facing error handling
 - Quiz Maker landing page at `/` with links to `/register` and `/login`
 - Auth forms and MCQ placeholder on dedicated routes: `/register`, `/login`, `/mcq`
+- Vitest test harness (Phase 6)
+
+- `sessions` table in D1 with migration `0002_create_sessions_table.sql`
+- Session service in `src/lib/services/session-service.ts`
+- Opaque session tokens (32 random bytes, base64url) with SHA-256 hash stored in D1
+- HttpOnly `session` cookie set on register/login, cleared on logout
+- Remember-me checkbox on login (24-hour default session, 30-day when checked)
+- Real logout: delete session row and clear cookie
+- Route protection via `src/middleware.ts` — `/mcq` requires a valid session; `/login` and `/register` redirect to `/mcq` when already signed in
+- Signed-in teacher name on `/mcq` via `getCurrentUser()`
 
 
 
 ### Out of Scope
 
 - Social login / OAuth
-- Sessions, cookies, tokens, JWTs, access or refresh tokens, or "remember me"
-- Route protection / auth middleware
+- JWTs, access tokens, refresh tokens, or signed stateless cookies (cut — see below)
 - Password reset, email verification, rate limiting, or account lockout
 - Roles or permissions
 - Account update and delete (neither service methods nor UI)
@@ -58,10 +69,10 @@ We believe that a simple register-and-login flow with secure password hashing wi
 
 ### Cut
 
+- **JWT / access / refresh tokens** — database-backed opaque tokens were chosen instead. Real logout requires invalidating server state; JWT-only cookies would need a blocklist or short TTL plus refresh rotation, adding complexity without benefit at this scale. No JWT library was added.
 - **bcrypt / argon2 npm packages** — native bindings do not run on Cloudflare Workers; use Web Crypto PBKDF2 instead
 - **Server Actions for auth** — the brief requires literal REST endpoints (`POST /api/auth/register`, etc.); forms call these via `fetch` from client components rather than `useActionState`
-- **Personalized** `/mcq` **page** — would require passing identity across the redirect or inventing ad-hoc session state, which is explicitly out of scope
-- `updated_at` **column** — no update path exists in this phase, and SQLite will not maintain it without a trigger. Add it alongside the first update feature
+- `updated_at` **column** — no update path exists yet, and SQLite will not maintain it without a trigger. Add it alongside the first update feature
 - **Confirm password field** — not in original requirements; cheap UX add if requested later
 
 ---
@@ -99,11 +110,67 @@ CREATE TABLE users (
 - Read results via `all()` and take `results[0]`. The project rule warns that `first()` behaves inconsistently between local and remote D1.
 - A `UNIQUE` violation surfaces as an error whose message names the offending column, for example `UNIQUE constraint failed: users.username: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_UNIQUE)`. Phase 3 matches on `users.username` / `users.email` to map the violation to the right field error rather than a 500.
 
+#### Sessions table (Phase 7)
+
+Migration: `migrations/0002_create_sessions_table.sql`. Applied locally; remote requires explicit user approval per project rules.
+
+```sql
+CREATE TABLE sessions (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  token_hash TEXT NOT NULL UNIQUE,
+  user_id TEXT NOT NULL,
+  expires_at DATETIME NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_sessions_user_id ON sessions(user_id);
+CREATE INDEX idx_sessions_expires_at ON sessions(expires_at);
+```
+
+**Design notes:**
+
+- The cookie carries a **raw opaque token** (32 random bytes, base64url-encoded). D1 stores only `SHA-256(token)` as hex in `token_hash`. A database leak does not directly expose valid session cookies.
+- `expires_at` is written as an ISO-8601 string from JavaScript and compared against `new Date().toISOString()` on lookup. Expired rows are ignored; no background sweeper in this phase.
+- Deleting a user cascades to their sessions via `ON DELETE CASCADE`.
+- Default session lifetime is **24 hours** (`SESSION_MAX_AGE_SECONDS`). Remember-me extends to **30 days** (`REMEMBER_ME_MAX_AGE_SECONDS`). Both the cookie `Max-Age` and the D1 row use the same duration.
+- No `SESSION_SECRET` or signing key is required — validation is a D1 lookup by token hash, not JWT verification.
+
+
+
+### Session Management (Phase 7)
+
+Implemented across `src/lib/auth/session-token.ts`, `session-cookie.ts`, `get-current-user.ts`, and `src/lib/services/session-service.ts`.
+
+**Token lifecycle:**
+
+1. `generateSessionToken()` — 32 random bytes → base64url cookie value + SHA-256 hash for D1
+2. `createSession(userId, rememberMe)` — insert row, return `{ token, expiresAt, rememberMe, maxAgeSeconds }` to the auth handler (token stays server-side until the route sets the cookie)
+3. `getSessionUserId(token)` — hash the cookie value, look up a non-expired row, return `user_id` or `null`
+4. `deleteSession(token)` — remove the row on logout
+
+**Cookie (`session`):**
+
+| Attribute  | Value                                      |
+| ---------- | ------------------------------------------ |
+| Name       | `session`                                  |
+| HttpOnly   | yes                                        |
+| Path       | `/`                                        |
+| SameSite   | `Lax`                                      |
+| Secure     | yes in production (`NODE_ENV === "production"`) |
+| Max-Age    | 86400 (default) or 2592000 (remember me)   |
+
+The JSON response body contains `{ user: PublicUser }` only — the session token is **never** returned in JSON; it is set exclusively via `Set-Cookie` by `src/lib/api/auth-response.ts`.
+
+**Current user resolution:** `getCurrentUser()` reads the cookie via `next/headers`, validates the session, loads the user by id, and returns `PublicUser | null`. Used by `/mcq` and available to future server components.
+
+**Route protection:** `src/middleware.ts` runs on `/mcq`, `/mcq/*`, `/login`, and `/register`. Unauthenticated requests to `/mcq` redirect to `/login`. Valid sessions on `/login` or `/register` redirect to `/mcq`. Invalid or expired cookies on protected routes redirect to `/login` and delete the stale cookie.
+
 
 
 ### API Endpoints
 
-Implemented as **REST route handlers** under `src/app/api/auth/`. Business logic lives in `src/lib/api/auth-handlers.ts`; each route file parses the request, calls the handler, and returns `NextResponse.json(...)`.
+Implemented as **REST route handlers** under `src/app/api/auth/`. Business logic lives in `src/lib/api/auth-handlers.ts`; each route file parses the request, calls the handler, and returns `NextResponse.json(...)`. Register and login routes call `jsonWithSession()` to attach the HttpOnly cookie; logout calls `jsonWithClearedSession()`.
 
 All endpoints accept and return `application/json`. Shared error shape:
 
@@ -121,6 +188,8 @@ export type LogoutResponse = {
   redirectTo: "/login";
 };
 ```
+
+Successful register/login handlers also create a session internally (`AuthHandlerSuccess`), but the session token is written to `Set-Cookie` only — not to the JSON body.
 
 
 
@@ -146,14 +215,15 @@ export type LogoutResponse = {
 2. Check username and email availability
 3. Hash the password
 4. Insert via `userService.createUser`
-5. Return the created `PublicUser` (no `password_hash`)
+5. Create a session (`rememberMe: false`)
+6. Return the created `PublicUser` and set the `session` cookie
 
 **Response:**
 
 
-| Status                    | Body                                                                                                                   |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| 201 Created               | `{ "user": PublicUser }` — client navigates to `/mcq`                                                                  |
+| Status                    | Body                                                                                                                   | Cookies                                      |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| 201 Created               | `{ "user": PublicUser }` — client navigates to `/mcq`                                                                  | `Set-Cookie: session=…; HttpOnly; …`        |
 | 400 Bad Request           | `{ "fieldErrors": { "email": ["Enter a valid email address"] } }`                                                      |
 | 400 Bad Request           | `{ "fieldErrors": { "email": ["That email is already registered"] } }`                                                 |
 | 400 Bad Request           | `{ "fieldErrors": { "username": ["That username is taken"] } }`                                                        |
@@ -169,9 +239,12 @@ export type LogoutResponse = {
 ```json
 {
   "email": "jane@school.edu",
-  "password": "securepass123"
+  "password": "securepass123",
+  "rememberMe": false
 }
 ```
+
+`rememberMe` is optional; defaults to `false`. Accepts boolean or checkbox-style `"on"`.
 
 **Validation:** Zod schema `loginSchema`. Presence and type only — never apply registration strength rules to login, which would leak password policy and reject legacy values.
 
@@ -180,14 +253,15 @@ export type LogoutResponse = {
 1. Parse JSON body; lowercase email
 2. Look up the user by email
 3. Verify the supplied password against the stored `password_hash`
-4. Return `PublicUser` on success
+4. Create a session with the requested `rememberMe` duration
+5. Return `PublicUser` and set the `session` cookie
 
 **Response:**
 
 
-| Status                    | Body                                                                                                                                                          |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 200 OK                    | `{ "user": PublicUser }` — client navigates to `/mcq`                                                                                                         |
+| Status                    | Body                                                                                                                                                          | Cookies                               |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| 200 OK                    | `{ "user": PublicUser }` — client navigates to `/mcq`                                                                                                         | `Set-Cookie: session=…; HttpOnly; …` |
 | 400 Bad Request           | `{ "fieldErrors": { "email": ["Email is required"] } }`                                                                                                       |
 | 401 Unauthorized          | `{ "formError": "Invalid email or password" }` — identical message and comparable timing for unknown email and wrong password, to prevent account enumeration |
 | 500 Internal Server Error | `{ "formError": "Something went wrong. Please try again." }`                                                                                                  |
@@ -197,16 +271,21 @@ export type LogoutResponse = {
 
 #### POST /api/auth/logout
 
-**Request body:** none (empty body or `{}`).
+**Request body:** none (empty body or `{}`). The route reads the `session` cookie from the `Cookie` header.
 
-**Behavior:** There is no session, cookie, or token to invalidate in this phase, so the handler performs no server-side state change. It exists to establish the endpoint so Phase 2 can add real invalidation behind the same path.
+**Behavior:**
+
+1. Parse the session token from the `Cookie` header
+2. Delete the matching row from `sessions` (no-op if token missing or unknown)
+3. Clear the `session` cookie
+4. Return `{ redirectTo: "/login" }`
 
 **Response:**
 
 
-| Status | Body                                                        |
-| ------ | ----------------------------------------------------------- |
-| 200 OK | `{ "redirectTo": "/login" }` — client navigates to `/login` |
+| Status | Body                                                        | Cookies                    |
+| ------ | ----------------------------------------------------------- | -------------------------- |
+| 200 OK | `{ "redirectTo": "/login" }` — client navigates to `/login` | `Set-Cookie: session=; Max-Age=0` |
 
 
 
@@ -254,14 +333,16 @@ The module also exports `DUMMY_PASSWORD_HASH`, a syntactically valid hash that n
 | Salt                   | Cryptographically random and unique per user; never a shared or static salt                                                                                                                                                    |
 | Account enumeration    | Login returns one generic message for unknown email and wrong password alike                                                                                                                                                   |
 | SQL injection          | Prepared statements with bound numbered placeholders only                                                                                                                                                                      |
-| Server/client boundary | `password.ts`, `user-service.ts`, and `auth-handlers.ts` are server-only. Never import them into a `'use client'` file. Route handlers and handler modules are the boundary; client components call endpoints via `fetch` only |
-| Data exposure          | Only `PublicUser` crosses back to the client. `password_hash` never leaves the service layer                                                                                                                                   |
-| Logging                | Never log request bodies or any field named `password` for auth flows                                                                                                                                                          |
-| Secrets                | Phase 1 introduces none. If one is added later, place it in `.dev.vars`, add an empty placeholder to `.dev.vars.example`, and use `wrangler secret put` in production                                                          |
-| Transport              | HTTPS is terminated by Cloudflare in production; no application-level work needed                                                                                                                                              |
+| Server/client boundary | `password.ts`, session modules, `user-service.ts`, `session-service.ts`, and `auth-handlers.ts` are server-only. Never import them into a `'use client'` file. Route handlers and handler modules are the boundary; client components call endpoints via `fetch` only |
+| Data exposure          | Only `PublicUser` crosses back to the client in JSON. `password_hash` and session tokens never leave the server layer except via HttpOnly cookies |
+| Session fixation       | A fresh session row is created on every successful register and login; the old cookie is replaced by `Set-Cookie` |
+| Cookie theft mitigation | `HttpOnly` prevents JavaScript access; `SameSite=Lax` limits cross-site submission; `Secure` in production |
+| Logging                | Never log request bodies or any field named `password` for auth flows |
+| Secrets                | Phase 7 introduces none. Session security relies on random token entropy and D1 hash storage, not a signing secret |
+| Transport              | HTTPS is terminated by Cloudflare in production; no application-level work needed |
 
 
-**Known accepted gap:** `/mcq` is publicly reachable because route protection requires sessions, which are out of scope. This is acceptable only while the page holds no real data. Closing it is the first task of the next sprint.
+**Resolved:** `/mcq` is now gated by middleware and requires a valid session.
 
 ### Validation Rules
 
@@ -275,6 +356,7 @@ Defined as Zod schemas in `src/lib/validations/auth.ts` and applied server-side.
 | Username   | Required, 3–30 chars, alphanumeric plus `_` and `-`, lowercased, unique |
 | Email      | Required, valid format, max 254 chars, lowercased, unique               |
 | Password   | Required, min 8 chars, max 200 chars                                    |
+| Remember me (login only) | Optional boolean; defaults to `false`; accepts `"on"` from HTML checkboxes |
 
 
 The password maximum matters: PBKDF2 cost scales with input, so an unbounded password field is a denial-of-service vector against the Workers CPU limit.
@@ -292,7 +374,13 @@ The password maximum matters: PBKDF2 cost scales with input, so an unbounded pas
 | Two concurrent registrations for the same username    | The availability check is not atomic with the insert. The `UNIQUE` constraint is the real guard — catch the constraint violation and surface it as the duplicate field error, not as a 500 |
 | Login for an email that does not exist                | Generic "Invalid email or password"; still perform a hash verification against a dummy value so the response time matches the wrong-password path                                          |
 | Stored hash is malformed or from an unknown algorithm | Verification fails closed and returns the generic login error; log the malformed row id for investigation                                                                                  |
-| Direct navigation to `/mcq`                           | Page renders. Not access-controlled in this phase, by design                                                                                                                               |
+| Direct navigation to `/mcq` without a session         | Middleware redirects to `/login`                                                                                                                                                           |
+| Direct navigation to `/mcq` with a valid session      | Page renders; shows signed-in teacher name                                                                                                                                                 |
+| Direct navigation to `/login` or `/register` while signed in | Middleware redirects to `/mcq`                                                                                                                                                      |
+| Page reload on `/mcq` after login                     | Session cookie persists; page still renders with user identity                                                                                                                             |
+| Logout with no cookie or an already-deleted session   | Returns 200, clears cookie, redirects client to `/login` — idempotent                                                                                                                      |
+| Expired session cookie                                | Middleware redirects to `/login` and deletes the stale cookie; D1 lookup returns null                                                                                                      |
+| Remember me checked at login                          | Cookie and D1 row expire after 30 days instead of 24 hours                                                                                                                                 |
 | Form submitted twice rapidly                          | Submit button disabled while `fetch` is in flight; the `UNIQUE` constraint backstops duplicate inserts                                                                                     |
 | Malformed JSON body                                   | Route handler returns 400 with `{ "formError": "Invalid request body" }`                                                                                                                   |
 
@@ -316,20 +404,20 @@ Built with the shadcn/ui primitives already present in `src/components/ui/`: `fi
 
 #### Login (`/login`)
 
-- Fields: email, password
-- Submits via `fetch("POST", "/api/auth/login", { body: JSON })`
+- Fields: email, password, remember-me checkbox
+- Submits via `fetch("POST", "/api/auth/login", { body: JSON })` including `rememberMe`
 - Failure shows one form-level message from the 401/400 response body, not field-specific ones for auth failure
 - Link to `/register` for new users
-- On 200: client navigates to `/mcq`
+- On 200: client navigates to `/mcq`; browser stores the HttpOnly session cookie from `Set-Cookie`
 
 
 
 #### MCQ Placeholder (`/mcq`)
 
-- Static Server Component; no data fetching or personalization
+- Async Server Component; calls `getCurrentUser()` to show the signed-in teacher's name
 - States that MCQ features are coming in a future sprint
 - Logout control calls `POST /api/auth/logout` then navigates to `/login`
-- Not access-controlled — anyone can visit directly (accepted for this phase)
+- **Access-controlled** — middleware redirects unauthenticated visitors to `/login`
 
 
 
@@ -348,15 +436,23 @@ Built with the shadcn/ui primitives already present in `src/components/ui/`: `fi
 ```
 migrations/
   0001_create_users_table.sql          Users table (generated by wrangler, then edited)
+  0002_create_sessions_table.sql       Sessions table (Phase 7)
 
 src/lib/
   db.ts                                getDb() wrapping getCloudflareContext
   auth/password.ts                     hashPassword, verifyPassword
+  auth/session-token.ts                generateSessionToken, hashSessionToken
+  auth/session-cookie.ts               Cookie build/parse/clear helpers
+  auth/get-current-user.ts               getCurrentUser from session cookie
   validations/auth.ts                  registerSchema, loginSchema
   services/user-service.ts             All D1 user queries
+  services/session-service.ts          All D1 session queries
   api/auth-handlers.ts                 registerUser, loginUser, logoutUser logic
+  api/auth-response.ts                 jsonWithSession, jsonWithClearedSession
   types/user.ts                        PublicUser, UserRecord, UserRow
   types/auth-api.ts                    AuthErrorResponse, AuthSuccessResponse, LogoutResponse
+
+src/middleware.ts                      Route protection for /mcq, /login, /register
 
 src/app/api/auth/
   register/route.ts                    POST /api/auth/register
@@ -365,14 +461,14 @@ src/app/api/auth/
 
 src/components/
   signup-form.tsx                    'use client' registration form
-  login-form.tsx                     'use client' login form
+  login-form.tsx                     'use client' login form with remember me
   logout-control.tsx                 'use client' logout button for /mcq
 
 src/app/
   page.tsx                           Quiz Maker landing page
   register/page.tsx                  Renders SignupForm
   login/page.tsx                     Renders LoginForm
-  mcq/page.tsx                       Static placeholder
+  mcq/page.tsx                       Personalized placeholder (signed-in user)
 ```
 
 **Files to update:**
@@ -609,6 +705,42 @@ The user approved the test stack on 2026-08-27. Vitest uses jsdom for client com
 
 **TDD verification:** characterization tests were written before any application behavior was changed. The existing implementation passed the initial suite, so no production-code correction was needed. The final suite has 6 passing files and 33 passing tests. `npm run lint` and `npm run build` also pass.
 
+### Phase 7: Sessions, Cookies & Route Protection - COMPLETED
+
+**Objective:** Persist authenticated state across requests with D1-backed sessions, HttpOnly cookies, remember-me login, real logout, middleware protection for `/mcq`, and signed-in identity on the MCQ placeholder.
+
+**Approach:** Opaque session tokens stored in D1 (not JWT). Evaluated JWT/access/refresh tokens and cut them — real logout requires server-side invalidation; no new dependency was added.
+
+**Tasks:**
+
+1. ~~Write failing tests for session token helpers, cookie helpers, session service, updated auth handlers, API routes, middleware, and remember-me validation~~
+2. ~~Create~~ `migrations/0002_create_sessions_table.sql` ~~and apply locally~~
+3. ~~Implement~~ `session-token.ts`~~,~~ `session-cookie.ts`~~,~~ `session-service.ts`~~,~~ `get-current-user.ts`~~,~~ `auth-response.ts`
+4. ~~Update auth handlers to create sessions on register/login and delete on logout~~
+5. ~~Update API routes to set/clear the HttpOnly cookie~~
+6. ~~Add remember-me checkbox to~~ `login-form.tsx`
+7. ~~Add~~ `src/middleware.ts` ~~protecting~~ `/mcq` ~~and redirecting signed-in users away from auth pages~~
+8. ~~Personalize~~ `/mcq` ~~with~~ `getCurrentUser()`
+
+**Deliverables:**
+
+- `migrations/0002_create_sessions_table.sql`, applied locally
+- Session modules, session service, middleware, updated auth flow
+- 10 test files, **50 passing tests** (17 new/updated for Phase 7)
+- Branch `feature/user-auth-jwt`
+
+**Verified:**
+
+| Check | Result |
+| ----- | ------ |
+| Register/login set `Set-Cookie: session=…; HttpOnly` | pass (route tests) |
+| Logout deletes session and clears cookie (`Max-Age=0`) | pass (route + handler tests) |
+| Remember me extends session lifetime | pass (session service + handler tests) |
+| Middleware redirects unauthenticated `/mcq` to `/login` | pass |
+| Middleware redirects authenticated `/login` to `/mcq` | pass |
+| Raw session token never stored in D1 (hash only) | pass (design + service tests) |
+| `npm test` (50 tests), `npm run lint`, `npm run build` | pass (2026-08-31) |
+
 ---
 
 
@@ -621,11 +753,18 @@ The user approved the test stack on 2026-08-27. Vitest uses jsdom for client com
 
 - `wrangler.jsonc` — D1 binding configuration
 - `migrations/0001_create_users_table.sql` — users table schema
+- `migrations/0002_create_sessions_table.sql` — sessions table schema
 - `src/lib/db.ts` — resolves `env.DB` through `getCloudflareContext()`
 - `src/lib/auth/password.ts` — hash and verify
+- `src/lib/auth/session-token.ts` — opaque token generation and SHA-256 hashing
+- `src/lib/auth/session-cookie.ts` — HttpOnly cookie helpers
+- `src/lib/auth/get-current-user.ts` — resolve signed-in user from cookie
 - `src/lib/services/user-service.ts` — every D1 user query
+- `src/lib/services/session-service.ts` — every D1 session query
 - `src/lib/validations/auth.ts` — Zod schemas
 - `src/lib/api/auth-handlers.ts` — shared handler logic
+- `src/lib/api/auth-response.ts` — attach/clear session cookies on responses
+- `src/middleware.ts` — route protection
 - `src/app/api/auth/register/route.ts` — `POST /api/auth/register`
 - `src/app/api/auth/login/route.ts` — `POST /api/auth/login`
 - `src/app/api/auth/logout/route.ts` — `POST /api/auth/logout`
@@ -656,25 +795,30 @@ const row = results[0];
 ```
 
 ```typescript
-// src/app/api/auth/register/route.ts — thin route; logic in auth-handlers.ts
-import { NextResponse } from "next/server";
-import { registerSchema } from "@/lib/validations/auth";
-import { registerUser } from "@/lib/api/auth-handlers";
+// src/app/api/auth/login/route.ts — sets session cookie on success
+import { loginUser } from "@/lib/api/auth-handlers";
+import { jsonWithSession } from "@/lib/api/auth-response";
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => null);
-  const parsed = registerSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { fieldErrors: parsed.error.flatten().fieldErrors },
-      { status: 400 }
-    );
-  }
-  const result = await registerUser(parsed.data);
-  if (result.error) {
+  // …parse, validate…
+  const result = await loginUser(parsed.data);
+  if ("error" in result) {
     return NextResponse.json(result.error, { status: result.status });
   }
-  return NextResponse.json({ user: result.user }, { status: 201 });
+  return jsonWithSession(result, 200);
+}
+```
+
+```typescript
+// src/middleware.ts — gate /mcq behind a valid D1 session
+export async function middleware(request: NextRequest) {
+  const token = request.cookies.get("session")?.value;
+  if (isProtectedPath(pathname)) {
+    if (!token || !(await getCurrentUserIdFromToken(token))) {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
+  }
+  return NextResponse.next();
 }
 ```
 
@@ -720,12 +864,15 @@ export type PublicUser = {
 ### Important Notes
 
 - Never log plaintext passwords, and never return `password_hash` from the service to a component
-- Login uses email plus password; `username` is stored and unique but is not a login identifier in this phase
-- `/mcq` is unauthenticated by design — acceptable only while it holds no real data
+- Session tokens appear only in HttpOnly cookies — never in JSON responses or client-side JavaScript
+- Login uses email plus password; `username` is stored and unique but is not a login identifier
+- `/mcq` requires a valid session (middleware + server-side `getCurrentUser()`)
+- Middleware performs a D1 lookup per protected request. Acceptable at current scale; revisit caching if latency becomes an issue
 - Verify password hashing under `npm run preview`, not `npm run dev`. `next dev` runs on Node and will not surface the Workers CPU limit
 - `initOpenNextCloudflareForDev()` runs only during `next dev` (see `next.config.ts`) — not during `next build`
 - Do not apply migrations to remote D1, and do not run `npm run deploy`, without explicit user approval
 - Do not create a `tailwind.config.ts`; Tailwind v4 is configured in `src/app/globals.css`
+- Next.js 16 emits a deprecation notice for the `middleware` file convention in favour of `proxy`. The current `src/middleware.ts` still works; migrate when Next.js removes support
 
 ---
 
@@ -746,14 +893,19 @@ export type PublicUser = {
 - [x] Email and username differing only in case are rejected as duplicates
 - [x] `POST /api/auth/login` with valid credentials returns 200 with `PublicUser`; client navigates to `/mcq`
 - [x] `POST /api/auth/login` with unknown email or wrong password returns 401 with `"Invalid email or password"`, with comparable response timing
-- [x] `POST /api/auth/logout` returns 200 with `{ "redirectTo": "/login" }`; documented as a stub with no session invalidation
-- [x] `/mcq` shows a generic placeholder and is reachable without authentication
+- [x] `POST /api/auth/logout` deletes the session row, clears the cookie, and returns `{ "redirectTo": "/login" }`
+- [x] Register and login responses set an HttpOnly `session` cookie; the token is not in the JSON body
+- [x] Remember-me login extends session/cookie lifetime to 30 days
+- [x] `/mcq` requires authentication — middleware redirects unauthenticated visitors to `/login`
+- [x] `/mcq` shows the signed-in teacher's name
+- [x] Reloading `/mcq` after login keeps the user signed in
+- [x] Signed-in users visiting `/login` or `/register` are redirected to `/mcq`
+- [x] Migration `0002_create_sessions_table.sql` applied locally
 - [x] All route handler input is validated with a Zod schema before any database or hashing work
 - [x] No server-only module is imported into a `'use client'` file
 - [x] `/` shows the Quiz Maker landing page with links to `/register` and `/login`
-- [x] `npm run lint` and `npm run build` pass (verified 2026-08-27)
-- [x] Registration, login, rejection paths, and logout verified under `npm run preview` on the Workers runtime (2026-08-27)
-- [x] (Phase 6 approved) `npm run test` passes: 6 files, 33 tests
+- [x] `npm run lint` and `npm run build` pass (verified 2026-08-31)
+- [x] `npm run test` passes: 10 files, 50 tests
 
 ---
 
@@ -766,9 +918,12 @@ export type PublicUser = {
 | ----------------------- | --------------------------------------------------------------- | ------------------------------------------- |
 | Registration completion | User can register and reach `/mcq`                              | Manual test under `npm run preview`         |
 | Login verification      | Correct credentials redirect; wrong ones show the generic error | Manual test under `npm run preview`         |
+| Session persistence     | Reloading `/mcq` keeps the user signed in                       | Manual test under `npm run preview`         |
+| Route protection        | `/mcq` redirects to `/login` when logged out                    | Manual test + middleware unit tests         |
+| Real logout             | After logout, `/mcq` redirects to `/login`                      | Manual test under `npm run preview`         |
 | Password security       | No plaintext stored; hash verifies correctly                    | Inspect the local D1 row; verify round-trip |
 | Hashing performance     | Register and login complete within the Workers CPU limit        | Timing under `npm run preview`              |
-| Test coverage           | Password module and user service have passing tests             | `npm run test` green (if Phase 6 approved)  |
+| Test coverage           | Auth, session, and middleware behaviour covered                 | `npm run test` green (50 tests)             |
 
 
 ---
@@ -801,10 +956,10 @@ export type PublicUser = {
 | Package                                                             | Purpose                        | Status                                                                                               |
 | ------------------------------------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------- |
 | `zod`                                                               | Route handler input validation | **Installed in Phase 0** at `^4.4.3`. Required by `.cursor/rules/nextjs.mdc` and `.cursor/BUGBOT.md` |
-| `vitest`, `@vitejs/plugin-react`, `@testing-library/react`, `jsdom` | Automated testing              | **Installed in Phase 6**; 6 files and 33 tests pass                                                  |
+| `vitest`, `@vitejs/plugin-react`, `@testing-library/react`, `jsdom` | Automated testing              | **Installed in Phase 6**; 10 files and 50 tests pass                                                 |
 
 
-No new dependency is needed for password hashing or for UI.
+No new dependency was added in Phase 7 for sessions or middleware.
 
 ### Environment Variables
 
@@ -831,8 +986,12 @@ None introduced in this phase. `.dev.vars.example` needs no change.
 - **Decision:** iterations lowered to 20,000. This is the strongest setting that fits the Free plan, and it is still roughly 30× below OWASP guidance. **The residual weakness is accepted and is a plan limitation, not a code defect.** Raise to 600,000 on moving to the Paid plan; the self-describing hash format makes that a one-constant change with no data migration.
 - **Margin is thin.** At 20,000 iterations a hash costs ~7 ms median and up to ~9–11 ms in the worst samples observed, against a 10 ms budget that must also cover framework and route overhead. D1 queries are I/O and do not count toward CPU, so the hash dominates. The measurements come from local `workerd` on a loaded Windows machine and are probably pessimistic relative to Cloudflare's hardware, but if a deployed Worker reports CPU-limit errors, lowering to ~15,000 is the first lever.
 - **Evaluated and rejected: WASM Argon2id.** Attempted empirically with `hash-wasm`, which **cannot run on Workers at all**: every call failed with `CompileError: WebAssembly.compile(): Wasm code generation disallowed by embedder`. Workers forbids compiling WebAssembly from bytes at runtime and requires `.wasm` to be imported as a static module at build time; `hash-wasm` inlines its WASM as base64 and compiles on first use. Packages such as `argon2-wasm-edge` and `cfw-argon2id` exist precisely to work around this, but they need `.wasm` import wiring through Turbopack and OpenNext. Even if that were built, the ceiling does not move: OWASP's *minimum* Argon2id profile (m=19 MiB, t=2) costs tens of milliseconds, the standard profile (m=64 MiB, t=3) costs 250–400 ms, and fitting 10 ms would mean roughly 1–2 MiB of memory — ten to twenty times below the minimum, discarding most of the memory-hardness that motivates Argon2id. `hash-wasm` was uninstalled. Argon2id is worth revisiting **only on the Paid plan**, where it can be given real parameters.
-- **Risk:** No session means `/mcq` is publicly accessible
-- **Mitigation:** Accepted for this phase since the page holds no data; session management is the first item of the next sprint
+- **Risk (RESOLVED):** `/mcq` was publicly accessible before Phase 7
+- **Mitigation:** Middleware and session validation now gate `/mcq`
+- **Risk:** Middleware performs a D1 lookup on every protected navigation
+- **Mitigation:** Acceptable at current user scale. Session rows are indexed by `token_hash`. Consider edge caching or signed-cookie shortcuts only if latency becomes measurable
+- **Risk:** Expired session rows accumulate in D1
+- **Mitigation:** Expired rows are ignored on lookup. A scheduled cleanup job is deferred to a future hardening sprint
 - **Risk:** Uniqueness check and insert are not atomic, so concurrent registrations could race
 - **Mitigation:** The `UNIQUE` constraint is the authority; catch the violation and map it to the duplicate field error rather than a 500
 - **Risk:** Account enumeration via specific duplicate errors at registration
@@ -843,11 +1002,9 @@ None introduced in this phase. `.dev.vars.example` needs no change.
 ### User Experience Risks
 
 - **Risk:** Users expect to stay logged in after closing the browser
-- **Mitigation:** Document clearly that sessions are out of scope; plan session handling as the immediate follow-up
-- **Risk:** A logout button implies signing out of something persistent
-- **Mitigation:** Treat it as a redirect stub and label it honestly in the UI
+- **Mitigation:** Remember-me checkbox extends sessions to 30 days. Default 24-hour sessions balance security and convenience for a teaching tool
 - **Risk:** The `/mcq` placeholder reads as a broken page rather than an intentional stub
-- **Mitigation:** State plainly that MCQ features arrive in a future sprint
+- **Mitigation:** State plainly that MCQ features arrive in a future sprint; show the signed-in teacher's name so the page feels connected to the account
 
 ---
 
@@ -904,16 +1061,14 @@ directory does not exist until a preview or deploy runs, so the gap is invisible
 
 ## Next Sprint
 
-Deliberately left for the phase that follows:
+Deliberately left for the phase that follows Phase 7:
 
-- **Session management** — the blocking prerequisite for everything below. Establish and persist authenticated state across requests
-- **Route protection** — gate `/mcq` and every future MCQ route behind that session
-- **Real logout** — invalidate session state rather than merely redirecting
-- **Identity on the page** — show the signed-in teacher's name once identity survives a redirect
-- **MCQ data model and CRUD** — the question bank this phase exists to support
+- **MCQ data model and CRUD** — the question bank this auth work exists to support
 - **Multi-teacher collaboration** — shared banks, ownership, and permissions
 - **Account management** — update and delete user, password reset, email verification
 - **Abuse protection** — rate limiting and account lockout on the login path
+- **Session housekeeping** — scheduled cleanup of expired session rows
+- **Apply migration 0002 to remote D1** — required before production deploy of Phase 7
 
 ---
 
@@ -929,7 +1084,7 @@ When working with this PRD:
 4. Add implementation details under "Technical Implementation Details" as code is written
 5. Mark acceptance criteria as complete when features work
 6. Add troubleshooting entries when bugs are found and fixed
-7. Remote D1 migrations require explicit user approval per project rules; `0001` was applied to remote before deploy
+7. Remote D1 migrations require explicit user approval per project rules; `0001` was applied to remote before deploy; `0002` applied locally only as of 2026-08-31
 8. Do not deploy unless explicitly asked
 9. Ask before adding dependencies (`zod`, `vitest`, etc.)
 10. Keep `AGENTS.md` current as the stack changes. Its Project and Stack sections were updated in Phase 0 to record D1 and Zod
@@ -938,11 +1093,13 @@ When working with this PRD:
 
 - **Login by email only** — yes; username stored but not used for login
 - **Duplicate-field errors at registration** — yes; specific field errors for usability
+- **Session mechanism** — D1 opaque tokens + HttpOnly cookie, not JWT (2026-08-31)
+- **Phase 6 (Vitest)** — approved and completed on 2026-08-27
 
 **Still open:**
 
 - **Add a "confirm password" field to the registration form?**
-- **Phase 6 (Vitest)** — approved and completed on 2026-08-27
+- **Apply migration 0002 to remote D1** — pending explicit user approval before deploy
 
 ---
 
@@ -950,10 +1107,10 @@ When working with this PRD:
 
 ## Current Status
 
-**Last Updated:** 2026-08-27
-**Current Phase:** Phase 6 complete — auth sprint implementation and test harness done
-**Status:** Phases 0–6 COMPLETED
-**Repository:** Auth implementation and Phase 6 test harness merged to `main` through PR #4
-**Database:** Migration `0001_create_users_table.sql` applied locally and on remote D1
-**Build:** `npm test` (33 tests), `npm run lint`, `npm run build`, OpenNext build, Wrangler dry-run, and Worker startup check pass (verified 2026-08-27)
-**Next Steps:** Sprint 1 acceptance criteria are complete; session-based authentication remains intentionally deferred to the next sprint
+**Last Updated:** 2026-08-31
+**Current Phase:** Phase 7 complete — sessions, cookies, route protection, and remember-me
+**Status:** Phases 0–7 COMPLETED
+**Repository:** Phase 7 on branch `feature/user-auth-jwt` (Sprint 1 merged to `main` through PR #4)
+**Database:** Migration `0001` applied locally and on remote D1; migration `0002` applied locally only
+**Build:** `npm test` (50 tests), `npm run lint`, and `npm run build` pass (verified 2026-08-31)
+**Next Steps:** Apply `0002` to remote D1 before deploy; begin MCQ data model in the next sprint
