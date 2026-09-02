@@ -38,6 +38,9 @@ describe("auth forms", () => {
     fireEvent.change(screen.getByLabelText("Password"), {
       target: { value: "password123" },
     });
+    fireEvent.change(screen.getByLabelText("Confirm password"), {
+      target: { value: "password123" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Create account" }));
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("/mcq"));
@@ -50,8 +53,39 @@ describe("auth forms", () => {
         username: "janedoe",
         email: "jane@example.com",
         password: "password123",
+        confirmPassword: "password123",
       }),
     });
+  });
+
+  it("shows a client-side error when passwords do not match", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SignupForm />);
+    fireEvent.change(screen.getByLabelText("First name"), {
+      target: { value: "Jane" },
+    });
+    fireEvent.change(screen.getByLabelText("Last name"), {
+      target: { value: "Doe" },
+    });
+    fireEvent.change(screen.getByLabelText("Username"), {
+      target: { value: "janedoe" },
+    });
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "jane@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "password123" },
+    });
+    fireEvent.change(screen.getByLabelText("Confirm password"), {
+      target: { value: "different123" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+    expect(await screen.findByText("Passwords do not match")).toBeDefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
   });
 
   it("submits rememberMe when the checkbox is checked", async () => {

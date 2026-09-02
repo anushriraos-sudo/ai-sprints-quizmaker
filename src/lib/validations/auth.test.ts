@@ -10,6 +10,7 @@ describe("registerSchema", () => {
       username: "  Jane_Doe ",
       email: "  JANE@EXAMPLE.COM ",
       password: "password123",
+      confirmPassword: "password123",
     });
 
     expect(result).toEqual({
@@ -28,6 +29,7 @@ describe("registerSchema", () => {
       username: "not valid!",
       email: "invalid",
       password: "short",
+      confirmPassword: "short",
     });
 
     expect(result.success).toBe(false);
@@ -38,6 +40,24 @@ describe("registerSchema", () => {
       expect(errors.username).toBeDefined();
       expect(errors.email).toEqual(["Enter a valid email address"]);
       expect(errors.password).toBeDefined();
+    }
+  });
+
+  it("rejects mismatched passwords", () => {
+    const result = registerSchema.safeParse({
+      firstName: "Jane",
+      lastName: "Doe",
+      username: "janedoe",
+      email: "jane@example.com",
+      password: "password123",
+      confirmPassword: "different123",
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.confirmPassword).toEqual([
+        "Passwords do not match",
+      ]);
     }
   });
 });

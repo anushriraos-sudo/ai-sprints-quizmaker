@@ -32,17 +32,34 @@ const emailField = z
       .max(254, "Email must be at most 254 characters"),
   );
 
-export const registerSchema = z.object({
+const passwordField = z
+  .string()
+  .min(1, "Password is required")
+  .min(8, "Password must be at least 8 characters")
+  .max(200, "Password must be at most 200 characters");
+
+const registerBodySchema = z.object({
   firstName: nameField("First name"),
   lastName: nameField("Last name"),
   username: usernameField,
   email: emailField,
-  password: z
-    .string()
-    .min(1, "Password is required")
-    .min(8, "Password must be at least 8 characters")
-    .max(200, "Password must be at most 200 characters"),
+  password: passwordField,
+  confirmPassword: z
+    .string({ error: "Confirm password is required" })
+    .min(1, "Confirm password is required"),
 });
+
+export const registerSchema = registerBodySchema
+  .superRefine((data, ctx) => {
+    if (data.password !== data.confirmPassword) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Passwords do not match",
+        path: ["confirmPassword"],
+      });
+    }
+  })
+  .transform(({ confirmPassword: _confirmPassword, ...data }) => data);
 
 export const loginSchema = z.object({
   email: z

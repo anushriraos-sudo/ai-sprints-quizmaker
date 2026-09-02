@@ -175,7 +175,7 @@ export function McqPreview({ mcqId }: McqPreviewProps) {
 					<p
 						className={
 							feedback === "Correct"
-								? "text-sm font-medium text-foreground"
+								? "text-sm font-medium text-green-500"
 								: "text-sm font-medium text-destructive"
 						}
 						role="status"

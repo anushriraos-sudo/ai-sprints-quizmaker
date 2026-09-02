@@ -77,6 +77,7 @@ describe("auth route handlers", () => {
         username: " JANE_DOE ",
         email: " JANE@EXAMPLE.COM ",
         password: "password123",
+        confirmPassword: "password123",
       }),
     );
 
@@ -101,6 +102,7 @@ describe("auth route handlers", () => {
         username: "!",
         email: "invalid",
         password: "short",
+        confirmPassword: "short",
       }),
     );
 
@@ -112,6 +114,27 @@ describe("auth route handlers", () => {
         username: expect.any(Array),
         email: ["Enter a valid email address"],
         password: expect.any(Array),
+      },
+    });
+    expect(mocks.registerUser).not.toHaveBeenCalled();
+  });
+
+  it("returns a confirm-password error when passwords do not match", async () => {
+    const response = await registerPost(
+      jsonRequest("/api/auth/register", {
+        firstName: "Jane",
+        lastName: "Doe",
+        username: "janedoe",
+        email: "jane@example.com",
+        password: "password123",
+        confirmPassword: "different123",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      fieldErrors: {
+        confirmPassword: ["Passwords do not match"],
       },
     });
     expect(mocks.registerUser).not.toHaveBeenCalled();
