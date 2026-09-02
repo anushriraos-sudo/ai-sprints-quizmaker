@@ -37,6 +37,16 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
 		setFieldErrors({});
 
 		const formData = new FormData(event.currentTarget);
+		const password = String(formData.get("password") ?? "");
+		const confirmPassword = String(formData.get("confirmPassword") ?? "");
+
+		if (password !== confirmPassword) {
+			setFieldErrors({
+				confirmPassword: ["Passwords do not match"],
+			});
+			setSubmitting(false);
+			return;
+		}
 
 		try {
 			const response = await fetch("/api/auth/register", {
@@ -47,7 +57,8 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
 					lastName: formData.get("lastName"),
 					username: formData.get("username"),
 					email: formData.get("email"),
-					password: formData.get("password"),
+					password,
+					confirmPassword,
 				}),
 			});
 
@@ -158,6 +169,19 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
 								Must be at least 8 characters long.
 							</FieldDescription>
 							<FieldError>{fieldErrors?.password?.[0]}</FieldError>
+						</Field>
+						<Field data-invalid={!!fieldErrors?.confirmPassword}>
+							<FieldLabel htmlFor="confirmPassword">Confirm password</FieldLabel>
+							<Input
+								id="confirmPassword"
+								name="confirmPassword"
+								type="password"
+								autoComplete="new-password"
+								required
+								disabled={submitting}
+								aria-invalid={!!fieldErrors?.confirmPassword}
+							/>
+							<FieldError>{fieldErrors?.confirmPassword?.[0]}</FieldError>
 						</Field>
 						<Field>
 							<Button type="submit" disabled={submitting} className="w-full">
