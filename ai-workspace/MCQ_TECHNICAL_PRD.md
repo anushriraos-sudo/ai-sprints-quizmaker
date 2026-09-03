@@ -1,5 +1,5 @@
 Date created: 2026-08-31
-Date last modified: 2026-08-31 (post–remote migration verification)
+Date last modified: 2026-09-02
 
 # Multiple-Choice Question CRUD - Technical PRD
 
@@ -32,8 +32,8 @@ existing application's security and architecture.
 - Exactly one correct choice
 - Authenticated users can read, update, preview, and delete any MCQ in the shared bank
 - An accessible row actions menu with Edit, Preview, and Delete
-- An authoring-mode creator preview that displays all choices and identifies the correct
-  choice
+- An interactive preview at `/mcq/[id]/preview` where users try a question, submit an
+  answer, and see Correct/Incorrect feedback (without revealing the answer before submit)
 - An accessible delete confirmation dialog
 - D1 tables for MCQs, choices, and attempts, created through a migration
 - An MCQ service that owns all SQL and relationship handling
@@ -44,7 +44,8 @@ existing application's security and architecture.
 
 ### Out of Scope
 
-- A learner-facing quiz-taking UI — deferred to Future Phase 7
+- A dedicated learner route at `/mcq/[id]/try` and a learner-safe read API without
+  `isCorrect` — deferred to Phase 7 (basic try-it-out with feedback exists on preview)
 - Granular sharing permissions, roles, approval workflows, or transferring creator
   attribution
 - Multiple-correct-answer questions
@@ -75,8 +76,9 @@ The following decisions were confirmed on 2026-08-31:
    discovery UI is deferred.
 3. Editing preserves IDs for retained choices. Removing a choice cascade-deletes only
    attempts that selected that choice.
-4. The authoring-mode creator preview uses a dedicated `/mcq/[id]/preview` page and is
-   available to every authenticated user.
+4. The preview at `/mcq/[id]/preview` lets authenticated users try a question, record an
+   attempt, and see feedback. A separate learner route and learner-safe read API remain
+   deferred (Phase 7).
 5. Create and edit use distinct routes (`/mcq/new`, `/mcq/[id]/edit`) backed by the same
    `McqForm` component.
 6. A learner preview at `/mcq/[id]/try` is deferred to Future Phase 7 and will reuse the
@@ -424,15 +426,22 @@ boundary and become generic `500` responses.
 - Display server field/form errors using existing `Field`, `FieldLabel`, and `FieldError`
   conventions, with `aria-invalid` and message associations.
 
-#### Creator Preview (`/mcq/[id]/preview`)
+#### Interactive Preview (`/mcq/[id]/preview`)
 
 - Load the shared-bank MCQ.
-- Display the name, question, and all choices as a non-submittable preview.
-- Clearly but simply mark the correct choice with text/icon and not color alone.
+- Display the name, question, and all choices as a submittable try-it-out form.
+- Do not reveal which choice is correct before the user submits an answer.
+- Require exactly one selected choice before submit.
+- Submit records an attempt via `POST /api/mcqs/[id]/attempts` and shows Correct or
+  Incorrect feedback (text, not color alone).
+- Disable further selection and submission after one attempt is recorded.
 - Back/Edit navigation returns to the management workflow.
 - Show not-found and API-error states.
-- "Creator preview" describes the authoring-mode presentation, not an owner restriction;
-  every authenticated user can open it.
+- Every authenticated user can open the preview; `created_by_user_id` is not an
+  authorization boundary.
+- **Note:** This route still uses the creator `GET /api/mcqs/[id]` payload (which includes
+  `isCorrect` on choices). A learner-safe read path without correctness metadata remains
+  deferred to Phase 7.
 
 ### ShadCN Components
 
@@ -507,9 +516,9 @@ Valid requirement tests are not weakened to accommodate faulty production code.
 - **Shared form — `src/components/mcq-form.test.tsx`:** two default choices; add/remove
   limits; accessible labels and errors; one correct selection; create POST; edit loading
   and PUT; preserved choice IDs; Save/Cancel behavior; duplicate-submit prevention.
-- **Creator preview — `src/components/mcq-preview.test.tsx`:** question and choices;
-  perceivable correct-answer marker; Back/Edit navigation; loading, missing, and error
-  states.
+- **Creator preview — `src/components/mcq-preview.test.tsx`:** question and selectable
+  choices without revealing the answer; required selection before submit; attempt recording
+  with Correct/Incorrect feedback; Back/Edit navigation; loading, missing, and error states.
 - **Real local D1 checks:** migration structure; foreign keys; partial unique index;
   aggregate-write atomicity; choice and attempt cascades; representative shared-bank CRUD
   and attempt recording.
@@ -678,23 +687,23 @@ Valid requirement tests are not weakened to accommodate faulty production code.
    troubleshooting notes.~~
 
 **Deliverables:**
-- `src/components/mcq-preview.tsx` — non-submittable creator preview with text+icon correct
-  answer marker, Back/Edit navigation, and loading/error/not-found states
-- `src/components/mcq-preview.test.tsx` — 7 preview behavior tests
+- `src/components/mcq-preview.tsx` — interactive preview with choice selection, attempt
+  submission, Correct/Incorrect feedback, and Back/Edit navigation
+- `src/components/mcq-preview.test.tsx` — 10 preview behavior tests
 - `src/app/mcq/[id]/preview/page.tsx` — preview route
 - Full suite green; lint and build passing
 
 **TDD evidence:**
 - Red: preview test file failed with missing `@/components/mcq-preview` before implementation
-- Green: 7/7 preview tests pass; full suite 114/114 pass; lint passes (1 pre-existing
-  warning); build passes
+- Green: 10/10 preview tests pass; full suite 117/117 pass on `main` (2026-09-03); lint
+  passes (2 warnings); build passes
 
-**Regression gates (final verification, 2026-08-31):**
+**Regression gates (final verification, 2026-08-31; re-verified 2026-09-02 on `main`):**
 
 | Command | Result |
 | --- | --- |
-| `npm test` | 16 files, 114 tests, 0 failures |
-| `npm run lint` | Pass (1 pre-existing warning in `mcq-service.test.ts`) |
+| `npm test` | 16 files, 117 tests, 0 failures |
+| `npm run lint` | Pass (2 warnings: unused `nextGeneratedId`, unused `_confirmPassword`) |
 | `npm run build` | Pass — all MCQ routes present |
 | `npm run preview` | Pass — OpenNext build and Wrangler local server on port 8787 |
 | Manual UI/smoke test | Pass — register, create, list, edit, preview, delete verified in browser |
@@ -710,16 +719,26 @@ Valid requirement tests are not weakened to accommodate faulty production code.
 Remote verification: `wrangler d1 migrations list --remote` reports no pending migrations;
 `mcqs`, `mcq_choices`, and `mcq_attempts` tables confirmed on remote D1.
 
-**Pre-commit status:** MCQ implementation files are written and verified but not yet
-committed to git. Commit before deploy.
+**Git / release status (2026-09-03):**
+
+- MCQ feature merged to `main` via PR #6 (`feature/Sprint-2-MCQ-bank`, commit `c19cfad`).
+- Post-release polish merged via PR #7 (`Sprint-2-MCQ-bank-1`, confirm-password
+  validation and dev `next.config.ts` guard).
+- `main` at `be083ab`; working tree clean; remote D1 migrated.
 
 ---
 
 ## Future Work
 
-### Phase 7: Learner Preview - DEFERRED
+### Phase 7: Learner Preview - DEFERRED (partial UX on `/mcq/[id]/preview`)
 
-**Objective:** Add a learner-facing `/mcq/[id]/try` experience after v1 CRUD ships.
+**Objective:** Add a dedicated learner-facing `/mcq/[id]/try` experience with a safe read API.
+
+**Current state (2026-09-02):** `/mcq/[id]/preview` was extended after Phase 6 to support
+choice selection, attempt submission, and Correct/Incorrect feedback. That covers much of the
+learner UX, but still reads the creator MCQ payload (which includes `isCorrect` in the JSON).
+Phase 7 remains open for a learner-safe read contract and a separate `/mcq/[id]/try` route if
+product wants to split authoring preview from learner practice.
 
 This phase is future work and is not part of the v1 completion gate.
 
@@ -836,7 +855,8 @@ Final names may be adjusted to fit a clearer local grouping, but boundaries must
 - [x] One correct choice can be selected and is required before save.
 - [x] The shared form performs POST for create and PUT for edit.
 - [x] Cancel returns to the list without a mutation.
-- [x] Preview identifies the correct answer without relying on color alone.
+- [x] Preview supports try-it-out submission with Correct/Incorrect feedback and does not
+  reveal the answer before submit.
 - [x] Delete requires confirmation.
 - [x] Controls have visible labels or accessible names and support keyboard interaction.
 - [x] Validation errors are associated with invalid fields and communicated accessibly.
@@ -847,7 +867,7 @@ Final names may be adjusted to fit a clearer local grouping, but boundaries must
   evidence afterward.
 - [x] All MCQ validation, service, route, and component tests are green (61 MCQ-focused
   tests across validation, service, routes, list, form, and preview).
-- [x] The complete existing test suite remains green (114/114 total).
+- [x] The complete existing test suite remains green (117/117 total on `main`, 2026-09-02).
 - [x] `npm run lint` passes.
 - [x] `npm run build` passes.
 - [x] Local Workers-runtime verification recorded (preview server + API smoke test + manual
@@ -863,7 +883,7 @@ Final names may be adjusted to fit a clearer local grouping, but boundaries must
 | Data integrity | Zero orphan choices/attempts in tested create, update, and delete flows | Local D1 FK/cascade checks |
 | Shared-bank access | Authenticated users can list and manage MCQs across creators | Service/API tests and manual check |
 | Validation reliability | 100% of documented invalid payload classes rejected server-side | Validation and route tests |
-| Regression status | All pre-existing and MCQ tests green | Final `npm test` result: 114/114 pass |
+| Regression status | All pre-existing and MCQ tests green | Final `npm test` result: 117/117 pass |
 
 Product analytics are not added in this phase, so usage/time metrics cannot yet be
 measured automatically.
@@ -979,27 +999,28 @@ No new service, secret, or environment variable is required.
 
 ## Current Status
 
-**Last Updated:** 2026-08-31
+**Last Updated:** 2026-09-02
 
-**Current Phase:** Phase 6 complete — MCQ CRUD v1 shipped and verified
+**Current Phase:** Phase 6 complete — MCQ CRUD v1 shipped, merged, and verified on `main`
 
-**Status:** Phase 6 COMPLETED; Phase 7 DEFERRED; ready for git commit and deploy
+**Status:** Phase 6 COMPLETED; Phase 7 DEFERRED (partial try-it-out UX lives on preview route)
 
-**Verification summary:**
+**Verification summary (2026-09-03):**
 
-- Automated: 114/114 tests, lint pass, build pass
-- Remote D1: migration `0003` applied; MCQ tables live
-- Runtime: local Workers preview and manual UI smoke test passed
-- Git: MCQ source files verified but awaiting commit
+- Automated: 117/117 tests, lint pass (2 warnings), build pass
+- Remote D1: all migrations applied; MCQ tables live
+- Runtime: Workers preview and manual UI smoke test passed
+- Git: PR #6 (MCQ bank) and PR #7 (confirm-password polish) merged to `main`; working tree clean
 
 **Next Steps:**
 
-1. Commit the MCQ implementation (migration, API, UI, tests, this PRD).
-2. Deploy with explicit approval: `npm run deploy`.
-3. Phase 7 (learner preview at `/mcq/[id]/try`) remains deferred future work.
+1. Deploy with explicit approval: `npm run deploy`.
+2. Phase 7 (learner-safe read API and optional `/mcq/[id]/try` route) remains deferred.
 
 **Known non-blockers:**
 
-- Lint warning: unused `nextGeneratedId` in `mcq-service.test.ts`
+- Lint warnings: unused `nextGeneratedId` in `mcq-service.test.ts`; unused `_confirmPassword`
+  in `auth.ts` transform
 - Home page (`src/app/page.tsx`) copy still references MCQ as a future sprint
 - Next.js middleware deprecation warning (migrate to proxy in a future sprint)
+- Preview route uses creator API payload; learner-safe read path not yet split (Phase 7)
